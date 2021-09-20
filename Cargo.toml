@@ -1,0 +1,11 @@
+[package]
+name = "klask"
+version = "0.1.0"
+authors = ["Michal Gniadek <mgniadek@interia.pl>"]
+edition = "2018"
+
+[dependencies]
+clap = "3.0.0-beta.4"
+iced = "0.3"
+iced_futures = { version = "0.3.0", features = ["smol"] }
+smol = "1.2"
