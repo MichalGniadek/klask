@@ -2,12 +2,13 @@
 pub mod example_opts;
 
 use cansi::{CategorisedSlice, Color};
-use clap::{App, ArgMatches, ArgSettings, FromArgMatches, IntoApp};
+use clap::{App, ArgMatches, ArgSettings, FromArgMatches, IntoApp, ValueHint};
 use eframe::{
     egui::{self, Button, Color32, Label, TextEdit, Ui},
     epi,
 };
 use linkify::{LinkFinder, LinkKind};
+use native_dialog::FileDialog;
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
@@ -103,6 +104,8 @@ impl epi::App for Klask {
                             let _ = child.kill();
                             self.child = None;
                         }
+
+                        ui.label("Running...");
                     }
                 });
 
@@ -213,12 +216,24 @@ pub enum ArgKind {
         value: String,
         default: Option<String>,
     },
-    Multiple {
+    MultipleStrings {
         values: Vec<String>,
         default: Vec<String>,
     },
     Occurences(i32),
     Bool(bool),
+    Path {
+        value: String,
+        default: Option<String>,
+        allow_dir: bool,
+        allow_file: bool,
+    },
+    MultiplePaths {
+        values: Vec<String>,
+        default: Vec<String>,
+        allow_dir: bool,
+        allow_file: bool,
+    },
 }
 
 impl AppState {
@@ -238,27 +253,69 @@ impl AppState {
                 let kind = match (
                     a.is_set(ArgSettings::MultipleOccurrences),
                     a.is_set(ArgSettings::TakesValue),
+                    a.get_value_hint(),
                 ) {
-                    (true, true) => {
+                    (true, true, ValueHint::AnyPath | ValueHint::DirPath | ValueHint::FilePath) => {
                         let default: Vec<_> = a
                             .get_default_values()
                             .iter()
                             .map(|s| s.to_string_lossy().into_owned())
                             .collect();
-                        ArgKind::Multiple {
+                        ArgKind::MultiplePaths {
+                            values: default.clone(),
+                            default,
+                            allow_dir: matches!(
+                                a.get_value_hint(),
+                                ValueHint::AnyPath | ValueHint::DirPath
+                            ),
+                            allow_file: matches!(
+                                a.get_value_hint(),
+                                ValueHint::AnyPath | ValueHint::FilePath
+                            ),
+                        }
+                    }
+                    (true, true, _) => {
+                        let default: Vec<_> = a
+                            .get_default_values()
+                            .iter()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .collect();
+                        ArgKind::MultipleStrings {
                             values: default.clone(),
                             default,
                         }
                     }
-                    (true, false) => ArgKind::Occurences(0),
-                    (false, true) => ArgKind::String {
+                    (true, false, _) => ArgKind::Occurences(0),
+                    (
+                        false,
+                        true,
+                        ValueHint::AnyPath | ValueHint::DirPath | ValueHint::FilePath,
+                    ) => {
+                        let default = a
+                            .get_default_values()
+                            .first()
+                            .map(|s| s.to_string_lossy().into_owned());
+                        ArgKind::Path {
+                            value: default.clone().unwrap_or(String::new()),
+                            default,
+                            allow_dir: matches!(
+                                a.get_value_hint(),
+                                ValueHint::AnyPath | ValueHint::DirPath
+                            ),
+                            allow_file: matches!(
+                                a.get_value_hint(),
+                                ValueHint::AnyPath | ValueHint::FilePath
+                            ),
+                        }
+                    }
+                    (false, true, _) => ArgKind::String {
                         value: "".into(),
                         default: a
                             .get_default_values()
                             .first()
                             .map(|s| s.to_string_lossy().into_owned()),
                     },
-                    (false, false) => ArgKind::Bool(false),
+                    (false, false, _) => ArgKind::Bool(false),
                 };
 
                 ArgState {
@@ -335,7 +392,7 @@ impl AppState {
                     ArgKind::Bool(bool) => {
                         ui.checkbox(bool, "");
                     }
-                    ArgKind::Multiple { values, default } => {
+                    ArgKind::MultipleStrings { values, default } => {
                         ui.vertical(|ui| {
                             let mut remove_index = None;
                             for (index, value) in values.iter_mut().enumerate() {
@@ -343,6 +400,94 @@ impl AppState {
                                     if ui.small_button("-").clicked() {
                                         remove_index = Some(index);
                                     }
+                                    ui.add(TextEdit::singleline(value).desired_width(f32::MAX));
+                                });
+                            }
+
+                            if let Some(index) = remove_index {
+                                values.remove(index);
+                            }
+
+                            ui.horizontal(|ui| {
+                                if ui.button("New value").clicked() {
+                                    values.push(String::new());
+                                }
+                                ui.add_space(20.0);
+                                if ui.button("Reset to default").clicked() {
+                                    *values = default.clone();
+                                }
+                            })
+                        });
+                    }
+                    ArgKind::Path {
+                        value,
+                        default,
+                        allow_dir,
+                        allow_file,
+                    } => {
+                        if *allow_file && ui.button("Select file...").clicked() {
+                            if let Some(file) = FileDialog::new()
+                                .show_open_single_file()
+                                .unwrap()
+                                .map(|p| p.to_str().unwrap().to_string())
+                            {
+                                *value = file;
+                            }
+                        }
+
+                        if *allow_dir && ui.button("Select directory...").clicked() {
+                            if let Some(file) = FileDialog::new()
+                                .show_open_single_dir()
+                                .unwrap()
+                                .map(|p| p.to_str().unwrap().to_string())
+                            {
+                                *value = file;
+                            }
+                        }
+
+                        if let Some(default) = default {
+                            ui.add_space(20.0);
+                            if ui.button("Reset to default").clicked() {
+                                *value = default.clone();
+                            }
+                        }
+
+                        ui.add(TextEdit::singleline(value).desired_width(f32::MAX));
+                    }
+                    ArgKind::MultiplePaths {
+                        values,
+                        default,
+                        allow_dir,
+                        allow_file,
+                    } => {
+                        ui.vertical(|ui| {
+                            let mut remove_index = None;
+                            for (index, value) in values.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    if ui.small_button("-").clicked() {
+                                        remove_index = Some(index);
+                                    }
+
+                                    if *allow_file && ui.button("Select file...").clicked() {
+                                        if let Some(file) = FileDialog::new()
+                                            .show_open_single_file()
+                                            .unwrap()
+                                            .map(|p| p.to_str().unwrap().to_string())
+                                        {
+                                            *value = file;
+                                        }
+                                    }
+
+                                    if *allow_dir && ui.button("Select directory...").clicked() {
+                                        if let Some(file) = FileDialog::new()
+                                            .show_open_single_dir()
+                                            .unwrap()
+                                            .map(|p| p.to_str().unwrap().to_string())
+                                        {
+                                            *value = file;
+                                        }
+                                    }
+
                                     ui.add(TextEdit::singleline(value).desired_width(f32::MAX));
                                 });
                             }
@@ -414,7 +559,31 @@ impl AppState {
                         cmd.arg(call_name.as_ref().unwrap());
                     }
                 }
-                ArgKind::Multiple { values, .. } => {
+                ArgKind::MultipleStrings { values, .. } => {
+                    for value in values {
+                        if let Some(call_name) = call_name.as_ref() {
+                            cmd.arg(call_name);
+                        }
+                        cmd.arg(value);
+                    }
+                }
+                ArgKind::Path { value, default, .. } => match (&value[..], default, required) {
+                    ("", None, true) => return Err(()),
+                    ("", None, false) => {}
+                    ("", Some(default), _) => {
+                        if let Some(call_name) = call_name.as_ref() {
+                            cmd.arg(call_name);
+                        }
+                        cmd.arg(default);
+                    }
+                    (value, _, _) => {
+                        if let Some(call_name) = call_name.as_ref() {
+                            cmd.arg(call_name);
+                        }
+                        cmd.arg(value);
+                    }
+                },
+                ArgKind::MultiplePaths { values, .. } => {
                     for value in values {
                         if let Some(call_name) = call_name.as_ref() {
                             cmd.arg(call_name);
