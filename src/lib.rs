@@ -1,7 +1,7 @@
 #![feature(command_access)]
 pub mod example_opts;
 
-use clap::App;
+use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
     egui::{self, TextEdit, Ui},
     epi,
@@ -18,11 +18,52 @@ pub struct Klask {
 }
 
 impl Klask {
-    pub fn new(app: App) -> Self {
-        Self {
-            name: app.get_name().to_string(),
-            output: None,
-            state: AppState::new(&app),
+    pub fn run_derived<C, F>(f: F)
+    where
+        C: IntoApp + FromArgMatches,
+        F: FnOnce(C),
+    {
+        let app = C::into_app();
+        match App::new("Outer GUI")
+            .subcommand(app.clone())
+            .clone()
+            .try_get_matches()
+            .expect("Arguments should be verified by GUI app")
+            .subcommand_matches(app.get_name())
+        {
+            // Called from gui
+            Some(m) => f(C::from_arg_matches(&m).unwrap()),
+            // Run gui
+            None => {
+                let klask = Self {
+                    name: app.get_name().to_string(),
+                    output: None,
+                    state: AppState::new(&app),
+                };
+                let native_options = eframe::NativeOptions::default();
+                eframe::run_native(Box::new(klask), native_options);
+            }
+        }
+    }
+
+    pub fn run_app(app: App, f: impl FnOnce(&ArgMatches)) {
+        match App::new("Outer GUI")
+            .subcommand(app.clone())
+            .clone()
+            .try_get_matches()
+            .expect("Arguments should be verified by GUI app")
+            .subcommand_matches(app.get_name())
+        {
+            Some(m) => f(m),
+            None => {
+                let klask = Self {
+                    name: app.get_name().to_string(),
+                    output: None,
+                    state: AppState::new(&app),
+                };
+                let native_options = eframe::NativeOptions::default();
+                eframe::run_native(Box::new(klask), native_options);
+            }
         }
     }
 }
@@ -37,13 +78,19 @@ impl epi::App for Klask {
             self.state.update(ui);
 
             if ui.button("Run!").clicked() {
-                let mut cmd = Command::new("./target/debug/klask");
-                cmd.stdout(Stdio::piped());
-                self.state.set_args(&mut cmd);
-                // let args: Vec<_> = cmd.get_args().collect();
-                // println!("{:?}", args);
-                let out = cmd.spawn().unwrap().wait_with_output().unwrap();
-                self.output = Some(std::str::from_utf8(&out.stdout).unwrap().to_string());
+                let mut cmd = Command::new(std::env::current_exe().unwrap());
+                cmd.stdout(Stdio::piped()).arg(&self.name);
+                match self.state.set_args(cmd) {
+                    Ok(mut cmd) => {
+                        // let args: Vec<_> = cmd.get_args().collect();
+                        // println!("{:?}", args);
+                        let out = cmd.spawn().unwrap().wait_with_output().unwrap();
+                        self.output = Some(std::str::from_utf8(&out.stdout).unwrap().to_string());
+                    }
+                    Err(()) => {
+                        self.output = Some(String::from("Incorrect"));
+                    }
+                }
             }
 
             if let Some(output) = &self.output {
@@ -187,7 +234,7 @@ impl AppState {
         }
     }
 
-    fn set_args(&self, cmd: &mut Command) {
+    fn set_args(&self, mut cmd: Command) -> Result<Command, ()> {
         for ArgState {
             call_name, kind, ..
         } in &self.args
@@ -198,15 +245,10 @@ impl AppState {
                         cmd.arg(call_name);
                     }
 
-                    if let Some(default) = default {
-                        if value == "" {
-                            cmd.arg(default);
-                        } else {
-                            cmd.arg(value);
-                        }
-                    } else {
-                        cmd.arg(value);
-                    }
+                    match default {
+                        Some(default) if value == "" => cmd.arg(default),
+                        _ => cmd.arg(value),
+                    };
                 }
                 &ArgKind::Occurences(i) => {
                     for _ in 0..i {
@@ -223,7 +265,11 @@ impl AppState {
 
         if let Some(current) = &self.current {
             cmd.arg(current);
-            self.subcommands[current].set_args(cmd);
+            self.subcommands[current].set_args(cmd)
+        } else if self.subcommands.len() > 0 {
+            Err(())
+        } else {
+            Ok(cmd)
         }
     }
 }
