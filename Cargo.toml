@@ -6,6 +6,4 @@ edition = "2018"
 
 [dependencies]
 clap = "3.0.0-beta.4"
-iced = "0.3"
-iced_futures = { version = "0.3.0", features = ["smol"] }
-smol = "1.2"
+eframe = "0.14.0"

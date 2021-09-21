@@ -1,236 +1,229 @@
+#![feature(command_access)]
 pub mod example_opts;
 
 use clap::App;
-use iced::{
-    button, container, text_input, tooltip::Position, Align, Background, Button, Color, Column,
-    Command, Length, Row, Space, Text, TextInput, Tooltip,
+use eframe::{
+    egui::{self, TextEdit, Ui},
+    epi,
 };
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    process::{Command, Stdio},
+};
 
-pub struct Klask<'a> {
-    app: App<'a>,
-    clap_widget: AppWidget,
-    run_state: button::State,
+pub struct Klask {
+    name: String,
+    output: Option<String>,
+    state: AppState,
 }
 
-struct AppWidget {
-    args: Vec<Arg>,
-    subcommands: HashMap<String, AppWidget>,
-}
-
-impl AppWidget {
-    fn new(app: &App) -> Self {
+impl Klask {
+    pub fn new(app: App) -> Self {
         Self {
-            args: app
-                .get_arguments()
-                .filter(|a| a.get_name() != "help")
-                .filter(|a| a.get_name() != "version")
-                .map(|a| Arg {
-                    name: a.get_name().into(),
-                    desc: a.get_about().unwrap_or(&"").to_string(),
-                    kind: if a.is_set(clap::ArgSettings::MultipleOccurrences) {
-                        ArgKind::Occurences {
-                            value: 0,
-                            increment_state: Default::default(),
-                            decrement_state: Default::default(),
-                        }
-                    } else {
-                        ArgKind::Text {
-                            value: "".into(),
-                            default: a
-                                .get_default_values()
-                                .first()
-                                .map_or_else(Default::default, |s| {
-                                    s.to_string_lossy().into_owned()
-                                }),
-                            state: Default::default(),
-                        }
-                    },
-                })
-                .collect(),
-            subcommands: HashMap::new(),
+            name: app.get_name().to_string(),
+            output: None,
+            state: AppState::new(&app),
         }
     }
+}
 
-    fn view(&mut self) -> Column<'_, Message> {
-        self.args
-            .iter_mut()
-            .fold(Column::new().padding(10).spacing(10), |col, arg| {
-                col.push(arg.view())
-            })
+impl epi::App for Klask {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn update(&mut self, ctx: &eframe::egui::CtxRef, _frame: &mut epi::Frame<'_>) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.state.update(ui);
+
+            if ui.button("Run!").clicked() {
+                let mut cmd = Command::new("./target/debug/klask");
+                cmd.stdout(Stdio::piped());
+                self.state.set_args(&mut cmd);
+                // let args: Vec<_> = cmd.get_args().collect();
+                // println!("{:?}", args);
+                let out = cmd.spawn().unwrap().wait_with_output().unwrap();
+                self.output = Some(std::str::from_utf8(&out.stdout).unwrap().to_string());
+            }
+
+            if let Some(output) = &self.output {
+                ui.label(output);
+            }
+        });
     }
 }
 
-struct Arg {
+struct AppState {
+    about: Option<String>,
+    args: Vec<ArgState>,
+    subcommands: HashMap<String, AppState>,
+    current: Option<String>,
+}
+
+pub struct ArgState {
     name: String,
-    desc: String,
+    call_name: Option<String>,
+    desc: Option<String>,
+    _required: bool,
     kind: ArgKind,
 }
 
-impl Arg {
-    fn view(&mut self) -> Row<'_, Message> {
-        let Arg { name, desc, kind } = self;
-
-        match kind {
-            ArgKind::Text {
-                value,
-                default,
-                state,
-            } => Row::new()
-                .align_items(Align::Center)
-                .push(
-                    Tooltip::new(Text::new(name.clone()), desc, Position::FollowCursor)
-                        .style(MyStyle),
-                )
-                .push(Space::with_width(Length::Units(10)))
-                .push(
-                    TextInput::new(state, default, &value, {
-                        let name = name.clone();
-                        move |value| Message::UpdateText {
-                            name: name.clone(),
-                            value,
-                        }
-                    })
-                    .padding(4),
-                ),
-            ArgKind::Occurences {
-                value,
-                increment_state,
-                decrement_state,
-            } => Row::new()
-                .align_items(Align::Center)
-                .push(
-                    Tooltip::new(Text::new(name.clone()), desc, Position::FollowCursor)
-                        .style(MyStyle),
-                )
-                .push(Space::with_width(Length::Units(10)))
-                .push(
-                    Button::new(
-                        decrement_state,
-                        Text::new("-").horizontal_alignment(iced::HorizontalAlignment::Center),
-                    )
-                    .width(Length::Units(20))
-                    .on_press(Message::UpdateOccurences {
-                        name: name.clone(),
-                        value: -1,
-                    }),
-                )
-                .push(Space::with_width(Length::Units(5)))
-                .push(Text::new(value.to_string()))
-                .push(Space::with_width(Length::Units(5)))
-                .push(
-                    Button::new(
-                        increment_state,
-                        Text::new("+").horizontal_alignment(iced::HorizontalAlignment::Center),
-                    )
-                    .width(Length::Units(20))
-                    .on_press(Message::UpdateOccurences {
-                        name: name.clone(),
-                        value: 1,
-                    }),
-                ),
-        }
-    }
-}
-
-enum ArgKind {
-    Text {
+pub enum ArgKind {
+    String {
         value: String,
-        default: String,
-        state: text_input::State,
+        default: Option<String>,
     },
-    Occurences {
-        value: i32,
-        increment_state: button::State,
-        decrement_state: button::State,
-    },
+    Occurences(i32),
+    Bool(bool),
 }
 
-#[derive(Debug, Clone)]
-pub enum Message {
-    UpdateText { name: String, value: String },
-    UpdateOccurences { name: String, value: i32 },
-    Run,
-    FinisedRun,
-}
+impl AppState {
+    pub fn new(app: &App) -> Self {
+        let args = app
+            .get_arguments()
+            .filter(|a| a.get_name() != "help" && a.get_name() != "version")
+            .map(|a| {
+                let kind = if a.is_set(clap::ArgSettings::MultipleOccurrences) {
+                    ArgKind::Occurences(0)
+                } else if !a.is_set(clap::ArgSettings::TakesValue) {
+                    ArgKind::Bool(false)
+                } else {
+                    ArgKind::String {
+                        value: "".into(),
+                        default: a
+                            .get_default_values()
+                            .first()
+                            .map(|s| s.to_string_lossy().into_owned()),
+                    }
+                };
 
-struct MyStyle;
-impl container::StyleSheet for MyStyle {
-    fn style(&self) -> container::Style {
-        container::Style {
-            background: Some(Background::Color(Color::from_rgb(0.8, 0.8, 0.8))),
-            border_width: 2.0,
-            border_radius: 5.0,
-            border_color: Color::BLACK,
-            ..Default::default()
+                let desc = if let Some(about) = a.get_long_about() {
+                    Some(about.to_string())
+                } else if let Some(about) = a.get_about() {
+                    Some(about.to_string())
+                } else {
+                    None
+                };
+
+                ArgState {
+                    name: a.get_name().to_string(),
+                    call_name: a
+                        .get_long()
+                        .map(|s| format!("--{}", s))
+                        .or(a.get_short().map(|c| format!("-{}", c))),
+                    desc,
+                    _required: a.is_set(clap::ArgSettings::Required),
+                    kind,
+                }
+            })
+            .collect();
+
+        let subcommands = app
+            .get_subcommands()
+            .map(|app| (app.get_name().to_string(), AppState::new(app)))
+            .collect();
+
+        AppState {
+            about: app.get_about().map(String::from),
+            args,
+            subcommands,
+            current: None,
         }
     }
-}
 
-impl<'a> iced::Application for Klask<'a> {
-    type Executor = iced::executor::Default;
-    type Message = Message;
-    type Flags = App<'a>;
+    pub fn update(&mut self, ui: &mut Ui) {
+        if let Some(ref about) = self.about {
+            ui.label(about);
+        }
 
-    fn new(app: Self::Flags) -> (Self, iced::Command<Self::Message>) {
-        (
-            Self {
-                clap_widget: AppWidget::new(&app),
-                run_state: Default::default(),
-                app,
-            },
-            Command::none(),
-        )
+        for ArgState {
+            ref name,
+            desc,
+            kind,
+            ..
+        } in &mut self.args
+        {
+            ui.horizontal(|ui| {
+                let label = ui.label(name);
+
+                if let Some(desc) = desc {
+                    label.on_hover_text(desc);
+                }
+
+                match kind {
+                    ArgKind::String { value, default } => {
+                        ui.add(
+                            TextEdit::singleline(value)
+                                .hint_text(default.as_ref().unwrap_or(&String::new()))
+                                .desired_width(f32::MAX),
+                        );
+                    }
+                    ArgKind::Occurences(i) => {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("-").clicked() {
+                                *i = (*i - 1).max(0);
+                            }
+                            ui.label(i.to_string());
+                            if ui.small_button("+").clicked() {
+                                *i += 1;
+                            }
+                        });
+                    }
+                    ArgKind::Bool(bool) => {
+                        ui.checkbox(bool, "");
+                    }
+                };
+            });
+        }
+
+        ui.horizontal(|ui| {
+            for (name, _) in &self.subcommands {
+                ui.selectable_value(&mut self.current, Some(name.clone()), name);
+            }
+        });
+
+        if let Some(current) = &self.current {
+            self.subcommands.get_mut(current).unwrap().update(ui);
+        }
     }
 
-    fn title(&self) -> String {
-        self.app.get_name().into()
-    }
+    fn set_args(&self, cmd: &mut Command) {
+        for ArgState {
+            call_name, kind, ..
+        } in &self.args
+        {
+            match kind {
+                ArgKind::String { value, default } => {
+                    if let Some(call_name) = call_name.as_ref() {
+                        cmd.arg(call_name);
+                    }
 
-    fn update(
-        &mut self,
-        message: Self::Message,
-        _clipboard: &mut iced::Clipboard,
-    ) -> iced::Command<Self::Message> {
-        // match message {
-        //     Message::UpdateText { name, value } => {
-        //         for Arg { name: n, kind, .. } in self.args.iter_mut() {
-        //             if name == *n {
-        //                 if let ArgKind::Text { value: v, .. } = kind {
-        //                     *v = value;
-        //                     return Command::none();
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     Message::UpdateOccurences { name, value } => {
-        //         for Arg { name: n, kind, .. } in self.args.iter_mut() {
-        //             if name == *n {
-        //                 if let ArgKind::Occurences { value: v, .. } = kind {
-        //                     *v += value;
-        //                     if *v < 0 {
-        //                         *v = 0
-        //                     }
-        //                     return Command::none();
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     Message::Run => {
-        //         return async { Message::FinisedRun }.into();
-        //     }
-        //     Message::FinisedRun => {
-        //         println!("Runned {:?}", self.app.get_bin_name());
-        //         return Command::none();
-        //     }
-        // };
-        panic!()
-    }
+                    if let Some(default) = default {
+                        if value == "" {
+                            cmd.arg(default);
+                        } else {
+                            cmd.arg(value);
+                        }
+                    } else {
+                        cmd.arg(value);
+                    }
+                }
+                &ArgKind::Occurences(i) => {
+                    for _ in 0..i {
+                        cmd.arg(call_name.as_ref().unwrap());
+                    }
+                }
+                &ArgKind::Bool(bool) => {
+                    if bool {
+                        cmd.arg(call_name.as_ref().unwrap());
+                    }
+                }
+            }
+        }
 
-    fn view(&mut self) -> iced::Element<'_, Self::Message> {
-        Column::new()
-            .push(self.clap_widget.view())
-            .push(Button::new(&mut self.run_state, Text::new("Run!")).on_press(Message::Run))
-            .into()
+        if let Some(current) = &self.current {
+            cmd.arg(current);
+            self.subcommands[current].set_args(cmd);
+        }
     }
 }

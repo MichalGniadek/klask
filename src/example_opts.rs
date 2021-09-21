@@ -21,6 +21,8 @@ pub struct Opts {
 pub enum SubCommand {
     #[clap(version = "1.3", author = "Someone E. <someone_else@other.com>")]
     Test(Test),
+    Run(Run),
+    Walk(Walk),
 }
 
 /// A subcommand for controlling testing
@@ -29,4 +31,19 @@ pub struct Test {
     /// Print debug info
     #[clap(short)]
     debug: bool,
+}
+
+/// A subcommand for running
+#[derive(Debug, Clap)]
+pub struct Run {
+    /// Example
+    lalala: String,
+}
+
+/// A subcommand for running2
+#[derive(Debug, Clap)]
+pub struct Walk {
+    /// Example2
+    #[clap(short)]
+    lalala: String,
 }

@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use clap::IntoApp;
-use iced::{Application, Settings};
+use eframe;
 use klask::{example_opts::Opts, Klask};
 
 fn main() {
-    Klask::run(Settings::with_flags(Opts::into_app().bin_name("klask"))).unwrap();
+    let app = Klask::new(Opts::into_app().bin_name("klask"));
+    let native_options = eframe::NativeOptions::default();
+    eframe::run_native(Box::new(app), native_options);
 }
