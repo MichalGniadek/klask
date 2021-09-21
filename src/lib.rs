@@ -8,12 +8,14 @@ use eframe::{
 };
 use std::{
     collections::HashMap,
-    process::{Command, Stdio},
+    io::{BufRead, BufReader},
+    process::{ChildStdout, Command, Stdio},
 };
 
 pub struct Klask {
     name: String,
-    output: Option<String>,
+    reader: Option<BufReader<ChildStdout>>,
+    output: String,
     state: AppState,
 }
 
@@ -23,27 +25,7 @@ impl Klask {
         C: IntoApp + FromArgMatches,
         F: FnOnce(C),
     {
-        let app = C::into_app();
-        match App::new("Outer GUI")
-            .subcommand(app.clone())
-            .clone()
-            .try_get_matches()
-            .expect("Arguments should be verified by GUI app")
-            .subcommand_matches(app.get_name())
-        {
-            // Called from gui
-            Some(m) => f(C::from_arg_matches(&m).unwrap()),
-            // Run gui
-            None => {
-                let klask = Self {
-                    name: app.get_name().to_string(),
-                    output: None,
-                    state: AppState::new(&app),
-                };
-                let native_options = eframe::NativeOptions::default();
-                eframe::run_native(Box::new(klask), native_options);
-            }
-        }
+        Self::run_app(C::into_app(), |m| f(C::from_arg_matches(m).unwrap()));
     }
 
     pub fn run_app(app: App, f: impl FnOnce(&ArgMatches)) {
@@ -58,7 +40,8 @@ impl Klask {
             None => {
                 let klask = Self {
                     name: app.get_name().to_string(),
-                    output: None,
+                    reader: None,
+                    output: String::new(),
                     state: AppState::new(&app),
                 };
                 let native_options = eframe::NativeOptions::default();
@@ -77,25 +60,29 @@ impl epi::App for Klask {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.state.update(ui);
 
-            if ui.button("Run!").clicked() {
+            if ui.button("Run!").clicked() && self.reader.is_none() {
                 let mut cmd = Command::new(std::env::current_exe().unwrap());
                 cmd.stdout(Stdio::piped()).arg(&self.name);
                 match self.state.set_args(cmd) {
                     Ok(mut cmd) => {
                         // let args: Vec<_> = cmd.get_args().collect();
                         // println!("{:?}", args);
-                        let out = cmd.spawn().unwrap().wait_with_output().unwrap();
-                        self.output = Some(std::str::from_utf8(&out.stdout).unwrap().to_string());
+                        self.reader = Some(BufReader::new(cmd.spawn().unwrap().stdout.unwrap()));
+                        self.output = String::new();
                     }
                     Err(()) => {
-                        self.output = Some(String::from("Incorrect"));
+                        self.output = String::from("Incorrect");
                     }
                 }
             }
 
-            if let Some(output) = &self.output {
-                ui.label(output);
+            if let Some(reader) = &mut self.reader {
+                if let Ok(0) = reader.read_line(&mut self.output) {
+                    self.reader = None;
+                }
             }
+
+            ui.label(&self.output);
         });
     }
 }
@@ -111,7 +98,7 @@ pub struct ArgState {
     name: String,
     call_name: Option<String>,
     desc: Option<String>,
-    _required: bool,
+    required: bool,
     kind: ArgKind,
 }
 
@@ -159,7 +146,7 @@ impl AppState {
                         .map(|s| format!("--{}", s))
                         .or(a.get_short().map(|c| format!("-{}", c))),
                     desc,
-                    _required: a.is_set(clap::ArgSettings::Required),
+                    required: a.is_set(clap::ArgSettings::Required),
                     kind,
                 }
             })
@@ -236,7 +223,10 @@ impl AppState {
 
     fn set_args(&self, mut cmd: Command) -> Result<Command, ()> {
         for ArgState {
-            call_name, kind, ..
+            call_name,
+            kind,
+            required,
+            ..
         } in &self.args
         {
             match kind {
@@ -245,9 +235,15 @@ impl AppState {
                         cmd.arg(call_name);
                     }
 
-                    match default {
-                        Some(default) if value == "" => cmd.arg(default),
-                        _ => cmd.arg(value),
+                    match (&value[..], default, required) {
+                        ("", None, true) => return Err(()),
+                        ("", None, false) => {}
+                        ("", Some(default), _) => {
+                            cmd.arg(default);
+                        }
+                        (value, _, _) => {
+                            cmd.arg(value);
+                        }
                     };
                 }
                 &ArgKind::Occurences(i) => {
