@@ -7,6 +7,7 @@ use eframe::{
     egui::{self, Button, Color32, Label, TextEdit, Ui},
     epi,
 };
+use linkify::{LinkFinder, LinkKind};
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
@@ -123,52 +124,63 @@ impl epi::App for Klask {
                     ..
                 } in output
                 {
-                    fn convert(color: Color) -> Color32 {
-                        match color {
-                            Color::Black => Color32::from_rgb(0, 0, 0),
-                            Color::Red => Color32::from_rgb(205, 49, 49),
-                            Color::Green => Color32::from_rgb(13, 188, 121),
-                            Color::Yellow => Color32::from_rgb(229, 229, 16),
-                            Color::Blue => Color32::from_rgb(36, 114, 200),
-                            Color::Magenta => Color32::from_rgb(188, 63, 188),
-                            Color::Cyan => Color32::from_rgb(17, 168, 205),
-                            Color::White => Color32::from_rgb(229, 229, 229),
-                            Color::BrightBlack => Color32::from_rgb(102, 102, 102),
-                            Color::BrightRed => Color32::from_rgb(241, 76, 76),
-                            Color::BrightGreen => Color32::from_rgb(35, 209, 139),
-                            Color::BrightYellow => Color32::from_rgb(245, 245, 67),
-                            Color::BrightBlue => Color32::from_rgb(59, 142, 234),
-                            Color::BrightMagenta => Color32::from_rgb(214, 112, 214),
-                            Color::BrightCyan => Color32::from_rgb(41, 184, 219),
-                            Color::BrightWhite => Color32::from_rgb(229, 229, 229),
-                        }
+                    for span in LinkFinder::new().spans(text) {
+                        match span.kind() {
+                            Some(LinkKind::Url) => ui.hyperlink(span.as_str()),
+                            Some(LinkKind::Email) => {
+                                ui.hyperlink(format!("mailto:{}", span.as_str()))
+                            }
+                            Some(_) | None => {
+                                fn convert(color: Color) -> Color32 {
+                                    match color {
+                                        Color::Black => Color32::from_rgb(0, 0, 0),
+                                        Color::Red => Color32::from_rgb(205, 49, 49),
+                                        Color::Green => Color32::from_rgb(13, 188, 121),
+                                        Color::Yellow => Color32::from_rgb(229, 229, 16),
+                                        Color::Blue => Color32::from_rgb(36, 114, 200),
+                                        Color::Magenta => Color32::from_rgb(188, 63, 188),
+                                        Color::Cyan => Color32::from_rgb(17, 168, 205),
+                                        Color::White => Color32::from_rgb(229, 229, 229),
+                                        Color::BrightBlack => Color32::from_rgb(102, 102, 102),
+                                        Color::BrightRed => Color32::from_rgb(241, 76, 76),
+                                        Color::BrightGreen => Color32::from_rgb(35, 209, 139),
+                                        Color::BrightYellow => Color32::from_rgb(245, 245, 67),
+                                        Color::BrightBlue => Color32::from_rgb(59, 142, 234),
+                                        Color::BrightMagenta => Color32::from_rgb(214, 112, 214),
+                                        Color::BrightCyan => Color32::from_rgb(41, 184, 219),
+                                        Color::BrightWhite => Color32::from_rgb(229, 229, 229),
+                                    }
+                                }
+
+                                let mut label =
+                                    Label::new(span.as_str()).text_color(convert(fg_colour));
+
+                                if bg_colour != Color::Black {
+                                    label = label.background_color(convert(bg_colour));
+                                }
+
+                                if italic {
+                                    label = label.italics();
+                                }
+
+                                if underline {
+                                    label = label.underline();
+                                }
+
+                                if strikethrough {
+                                    label = label.strikethrough();
+                                }
+
+                                label = match intensity {
+                                    cansi::Intensity::Normal => label,
+                                    cansi::Intensity::Bold => label.strong(),
+                                    cansi::Intensity::Faint => label.weak(),
+                                };
+
+                                ui.add(label)
+                            }
+                        };
                     }
-
-                    let mut label = Label::new(text).text_color(convert(fg_colour));
-
-                    if bg_colour != Color::Black {
-                        label = label.background_color(convert(bg_colour));
-                    }
-
-                    if italic {
-                        label = label.italics();
-                    }
-
-                    if underline {
-                        label = label.underline();
-                    }
-
-                    if strikethrough {
-                        label = label.strikethrough();
-                    }
-
-                    label = match intensity {
-                        cansi::Intensity::Normal => label,
-                        cansi::Intensity::Bold => label.strong(),
-                        cansi::Intensity::Faint => label.weak(),
-                    };
-
-                    ui.add(label);
                 }
             });
         });
