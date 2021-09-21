@@ -1,20 +1,22 @@
-#![feature(command_access)]
+#![feature(command_access)] // only for debugging
 pub mod example_opts;
 
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, TextEdit, Ui},
+    egui::{self, Button, TextEdit, Ui},
     epi,
 };
 use std::{
     collections::HashMap,
     io::{BufRead, BufReader},
-    process::{ChildStdout, Command, Stdio},
+    process::{Child, Command, Stdio},
+    sync::mpsc::{self, Receiver},
+    thread::{self},
 };
 
 pub struct Klask {
     name: String,
-    reader: Option<BufReader<ChildStdout>>,
+    child: Option<(Child, Receiver<String>)>,
     output: String,
     state: AppState,
 }
@@ -31,16 +33,15 @@ impl Klask {
     pub fn run_app(app: App, f: impl FnOnce(&ArgMatches)) {
         match App::new("Outer GUI")
             .subcommand(app.clone())
-            .clone()
             .try_get_matches()
-            .expect("Arguments should be verified by GUI app")
+            .expect("Arguments should've been verified by the GUI app")
             .subcommand_matches(app.get_name())
         {
             Some(m) => f(m),
             None => {
                 let klask = Self {
                     name: app.get_name().to_string(),
-                    reader: None,
+                    child: None,
                     output: String::new(),
                     state: AppState::new(&app),
                 };
@@ -58,32 +59,66 @@ impl epi::App for Klask {
 
     fn update(&mut self, ctx: &eframe::egui::CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.state.update(ui);
+            egui::ScrollArea::auto_sized().show(ui, |ui| {
+                self.state.update(ui);
 
-            if ui.button("Run!").clicked() && self.reader.is_none() {
-                let mut cmd = Command::new(std::env::current_exe().unwrap());
-                cmd.stdout(Stdio::piped()).arg(&self.name);
-                match self.state.set_args(cmd) {
-                    Ok(mut cmd) => {
-                        // let args: Vec<_> = cmd.get_args().collect();
-                        // println!("{:?}", args);
-                        self.reader = Some(BufReader::new(cmd.spawn().unwrap().stdout.unwrap()));
-                        self.output = String::new();
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(Button::new("Run!").enabled(self.child.is_none()))
+                        .clicked()
+                    {
+                        let mut cmd = Command::new(std::env::current_exe().unwrap());
+                        cmd.stdout(Stdio::piped()).arg(&self.name);
+                        match self.state.set_args(cmd) {
+                            Ok(mut cmd) => {
+                                // let args: Vec<_> = cmd.get_args().collect();
+                                // println!("{:?}", args);
+                                self.output = String::new();
+
+                                let mut child = cmd.spawn().unwrap();
+                                let mut reader = BufReader::new(child.stdout.take().unwrap());
+
+                                let (tx, rx) = mpsc::channel();
+                                thread::spawn(move || loop {
+                                    let mut output = String::new();
+                                    if let Ok(0) = reader.read_line(&mut output) {
+                                        break;
+                                    } else {
+                                        tx.send(output).unwrap();
+                                    }
+                                });
+
+                                self.child = Some((child, rx));
+                            }
+                            Err(()) => {
+                                self.output = String::from("Incorrect");
+                            }
+                        }
                     }
-                    Err(()) => {
-                        self.output = String::from("Incorrect");
+
+                    if let Some((child, _)) = &mut self.child {
+                        if ui.button("Kill").clicked() {
+                            let _ = child.kill();
+                            self.child = None;
+                        }
+                    }
+                });
+
+                if let Some((_, receiver)) = &mut self.child {
+                    for line in receiver.try_iter() {
+                        self.output.push_str(&line);
                     }
                 }
-            }
 
-            if let Some(reader) = &mut self.reader {
-                if let Ok(0) = reader.read_line(&mut self.output) {
-                    self.reader = None;
-                }
-            }
-
-            ui.label(&self.output);
+                ui.label(&self.output);
+            });
         });
+    }
+
+    fn on_exit(&mut self) {
+        if let Some((child, _)) = &mut self.child {
+            let _ = child.kill();
+        }
     }
 }
 
@@ -117,6 +152,14 @@ impl AppState {
             .get_arguments()
             .filter(|a| a.get_name() != "help" && a.get_name() != "version")
             .map(|a| {
+                let desc = if let Some(about) = a.get_long_about() {
+                    Some(about.to_string())
+                } else if let Some(about) = a.get_about() {
+                    Some(about.to_string())
+                } else {
+                    None
+                };
+
                 let kind = if a.is_set(clap::ArgSettings::MultipleOccurrences) {
                     ArgKind::Occurences(0)
                 } else if !a.is_set(clap::ArgSettings::TakesValue) {
@@ -129,14 +172,6 @@ impl AppState {
                             .first()
                             .map(|s| s.to_string_lossy().into_owned()),
                     }
-                };
-
-                let desc = if let Some(about) = a.get_long_about() {
-                    Some(about.to_string())
-                } else if let Some(about) = a.get_about() {
-                    Some(about.to_string())
-                } else {
-                    None
                 };
 
                 ArgState {
