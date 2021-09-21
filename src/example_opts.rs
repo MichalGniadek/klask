@@ -38,12 +38,13 @@ pub struct Test {
 pub struct Run {
     /// Example
     lalala: String,
+    hoho: Option<i32>,
 }
 
 /// A subcommand for running2
 #[derive(Debug, Clap)]
 pub struct Walk {
     /// Example2
-    #[clap(short)]
-    lalala: String,
+    #[clap(multiple_occurrences(true))]
+    mult: Vec<String>,
 }

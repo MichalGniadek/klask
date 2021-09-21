@@ -1,9 +1,10 @@
 #![feature(command_access)] // only for debugging
 pub mod example_opts;
 
-use clap::{App, ArgMatches, FromArgMatches, IntoApp};
+use cansi::{CategorisedSlice, Color};
+use clap::{App, ArgMatches, ArgSettings, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, TextEdit, Ui},
+    egui::{self, Button, Color32, Label, TextEdit, Ui},
     epi,
 };
 use std::{
@@ -110,7 +111,65 @@ impl epi::App for Klask {
                     }
                 }
 
-                ui.label(&self.output);
+                let output = cansi::categorise_text(&self.output);
+                for CategorisedSlice {
+                    text,
+                    fg_colour,
+                    bg_colour,
+                    intensity,
+                    italic,
+                    underline,
+                    strikethrough,
+                    ..
+                } in output
+                {
+                    fn convert(color: Color) -> Color32 {
+                        match color {
+                            Color::Black => Color32::from_rgb(0, 0, 0),
+                            Color::Red => Color32::from_rgb(205, 49, 49),
+                            Color::Green => Color32::from_rgb(13, 188, 121),
+                            Color::Yellow => Color32::from_rgb(229, 229, 16),
+                            Color::Blue => Color32::from_rgb(36, 114, 200),
+                            Color::Magenta => Color32::from_rgb(188, 63, 188),
+                            Color::Cyan => Color32::from_rgb(17, 168, 205),
+                            Color::White => Color32::from_rgb(229, 229, 229),
+                            Color::BrightBlack => Color32::from_rgb(102, 102, 102),
+                            Color::BrightRed => Color32::from_rgb(241, 76, 76),
+                            Color::BrightGreen => Color32::from_rgb(35, 209, 139),
+                            Color::BrightYellow => Color32::from_rgb(245, 245, 67),
+                            Color::BrightBlue => Color32::from_rgb(59, 142, 234),
+                            Color::BrightMagenta => Color32::from_rgb(214, 112, 214),
+                            Color::BrightCyan => Color32::from_rgb(41, 184, 219),
+                            Color::BrightWhite => Color32::from_rgb(229, 229, 229),
+                        }
+                    }
+
+                    let mut label = Label::new(text).text_color(convert(fg_colour));
+
+                    if bg_colour != Color::Black {
+                        label = label.background_color(convert(bg_colour));
+                    }
+
+                    if italic {
+                        label = label.italics();
+                    }
+
+                    if underline {
+                        label = label.underline();
+                    }
+
+                    if strikethrough {
+                        label = label.strikethrough();
+                    }
+
+                    label = match intensity {
+                        cansi::Intensity::Normal => label,
+                        cansi::Intensity::Bold => label.strong(),
+                        cansi::Intensity::Faint => label.weak(),
+                    };
+
+                    ui.add(label);
+                }
             });
         });
     }
@@ -142,6 +201,10 @@ pub enum ArgKind {
         value: String,
         default: Option<String>,
     },
+    Multiple {
+        values: Vec<String>,
+        default: Vec<String>,
+    },
     Occurences(i32),
     Bool(bool),
 }
@@ -160,18 +223,30 @@ impl AppState {
                     None
                 };
 
-                let kind = if a.is_set(clap::ArgSettings::MultipleOccurrences) {
-                    ArgKind::Occurences(0)
-                } else if !a.is_set(clap::ArgSettings::TakesValue) {
-                    ArgKind::Bool(false)
-                } else {
-                    ArgKind::String {
+                let kind = match (
+                    a.is_set(ArgSettings::MultipleOccurrences),
+                    a.is_set(ArgSettings::TakesValue),
+                ) {
+                    (true, true) => {
+                        let default: Vec<_> = a
+                            .get_default_values()
+                            .iter()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .collect();
+                        ArgKind::Multiple {
+                            values: default.clone(),
+                            default,
+                        }
+                    }
+                    (true, false) => ArgKind::Occurences(0),
+                    (false, true) => ArgKind::String {
                         value: "".into(),
                         default: a
                             .get_default_values()
                             .first()
                             .map(|s| s.to_string_lossy().into_owned()),
-                    }
+                    },
+                    (false, false) => ArgKind::Bool(false),
                 };
 
                 ArgState {
@@ -181,7 +256,7 @@ impl AppState {
                         .map(|s| format!("--{}", s))
                         .or(a.get_short().map(|c| format!("-{}", c))),
                     desc,
-                    required: a.is_set(clap::ArgSettings::Required),
+                    required: a.is_set(ArgSettings::Required),
                     kind,
                 }
             })
@@ -208,6 +283,7 @@ impl AppState {
         for ArgState {
             ref name,
             desc,
+            required,
             kind,
             ..
         } in &mut self.args
@@ -223,7 +299,13 @@ impl AppState {
                     ArgKind::String { value, default } => {
                         ui.add(
                             TextEdit::singleline(value)
-                                .hint_text(default.as_ref().unwrap_or(&String::new()))
+                                .hint_text(default.clone().unwrap_or_else(|| {
+                                    if *required {
+                                        String::new()
+                                    } else {
+                                        String::from("(Optional)")
+                                    }
+                                }))
                                 .desired_width(f32::MAX),
                         );
                     }
@@ -240,6 +322,33 @@ impl AppState {
                     }
                     ArgKind::Bool(bool) => {
                         ui.checkbox(bool, "");
+                    }
+                    ArgKind::Multiple { values, default } => {
+                        ui.vertical(|ui| {
+                            let mut remove_index = None;
+                            for (index, value) in values.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    if ui.small_button("-").clicked() {
+                                        remove_index = Some(index);
+                                    }
+                                    ui.add(TextEdit::singleline(value).desired_width(f32::MAX));
+                                });
+                            }
+
+                            if let Some(index) = remove_index {
+                                values.remove(index);
+                            }
+
+                            ui.horizontal(|ui| {
+                                if ui.button("New value").clicked() {
+                                    values.push(String::new());
+                                }
+                                ui.add_space(20.0);
+                                if ui.button("Reset to default").clicked() {
+                                    *values = default.clone();
+                                }
+                            })
+                        });
                     }
                 };
             });
@@ -266,17 +375,19 @@ impl AppState {
         {
             match kind {
                 ArgKind::String { value, default } => {
-                    if let Some(call_name) = call_name.as_ref() {
-                        cmd.arg(call_name);
-                    }
-
                     match (&value[..], default, required) {
                         ("", None, true) => return Err(()),
                         ("", None, false) => {}
                         ("", Some(default), _) => {
+                            if let Some(call_name) = call_name.as_ref() {
+                                cmd.arg(call_name);
+                            }
                             cmd.arg(default);
                         }
                         (value, _, _) => {
+                            if let Some(call_name) = call_name.as_ref() {
+                                cmd.arg(call_name);
+                            }
                             cmd.arg(value);
                         }
                     };
@@ -289,6 +400,14 @@ impl AppState {
                 &ArgKind::Bool(bool) => {
                     if bool {
                         cmd.arg(call_name.as_ref().unwrap());
+                    }
+                }
+                ArgKind::Multiple { values, .. } => {
+                    for value in values {
+                        if let Some(call_name) = call_name.as_ref() {
+                            cmd.arg(call_name);
+                        }
+                        cmd.arg(value);
                     }
                 }
             }
