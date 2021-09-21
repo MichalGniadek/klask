@@ -273,12 +273,13 @@ impl From<&Arg<'_>> for ArgState {
             None
         };
 
+        use ValueHint::*;
         let kind = match (
             a.is_set(ArgSettings::MultipleOccurrences),
             a.is_set(ArgSettings::TakesValue),
             a.get_value_hint(),
         ) {
-            (true, true, ValueHint::AnyPath | ValueHint::DirPath | ValueHint::FilePath) => {
+            (true, true, AnyPath | DirPath | FilePath | ExecutablePath) => {
                 let default: Vec<_> = a
                     .get_default_values()
                     .iter()
@@ -288,14 +289,8 @@ impl From<&Arg<'_>> for ArgState {
                 ArgKind::MultiplePaths {
                     values: default.clone(),
                     default,
-                    allow_dir: matches!(
-                        a.get_value_hint(),
-                        ValueHint::AnyPath | ValueHint::DirPath
-                    ),
-                    allow_file: matches!(
-                        a.get_value_hint(),
-                        ValueHint::AnyPath | ValueHint::FilePath
-                    ),
+                    allow_dir: matches!(a.get_value_hint(), AnyPath | DirPath),
+                    allow_file: matches!(a.get_value_hint(), AnyPath | FilePath | ExecutablePath),
                 }
             }
             (true, true, _) => {
@@ -310,7 +305,7 @@ impl From<&Arg<'_>> for ArgState {
                     default,
                 }
             }
-            (false, true, ValueHint::AnyPath | ValueHint::DirPath | ValueHint::FilePath) => {
+            (false, true, AnyPath | DirPath | FilePath | ExecutablePath) => {
                 let default = a
                     .get_default_values()
                     .first()
@@ -319,14 +314,8 @@ impl From<&Arg<'_>> for ArgState {
                 ArgKind::Path {
                     value: default.clone().unwrap_or(String::new()),
                     default,
-                    allow_dir: matches!(
-                        a.get_value_hint(),
-                        ValueHint::AnyPath | ValueHint::DirPath
-                    ),
-                    allow_file: matches!(
-                        a.get_value_hint(),
-                        ValueHint::AnyPath | ValueHint::FilePath
-                    ),
+                    allow_dir: matches!(a.get_value_hint(), AnyPath | DirPath),
+                    allow_file: matches!(a.get_value_hint(), AnyPath | FilePath | ExecutablePath),
                 }
             }
             (false, true, _) => ArgKind::String {
