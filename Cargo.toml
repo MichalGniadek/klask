@@ -2,7 +2,7 @@
 name = "klask"
 version = "0.1.0"
 authors = ["Michal Gniadek <mgniadek@interia.pl>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 Inflector = "0.11.4"

@@ -68,7 +68,7 @@ impl AppState {
             cmd.arg(current);
             self.subcommands[current].cmd_args(cmd)
         } else if !self.subcommands.is_empty() {
-            Err(format!("Internal error."))
+            Err("Internal error.".to_string())
         } else {
             Ok(cmd)
         }

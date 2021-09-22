@@ -3,14 +3,14 @@ use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, Ui};
 use inflector::Inflector;
 use native_dialog::FileDialog;
-use std::{ops::Not, process::Command};
+use std::process::Command;
 use uuid::Uuid;
 
 pub struct ArgState {
     pub name: String,
     pub call_name: Option<String>,
     pub desc: Option<String>,
-    pub required: bool,
+    pub optional: bool,
     pub kind: ArgKind,
 }
 
@@ -58,15 +58,13 @@ impl ArgState {
 
             match &mut self.kind {
                 ArgKind::String { value, default } => {
-                    let required = self.required;
-
-                    ui.error_style_if(self.required && value.is_empty(), |ui| {
+                    ui.error_style_if(!self.optional && value.is_empty(), |ui| {
                         ui.text_edit_singleline_hint(
                             value,
                             default
                                 .clone()
-                                .or(required.not().then(|| String::from("(Optional)")))
-                                .unwrap_or_else(|| String::new()),
+                                .or_else(|| self.optional.then(|| String::from("(Optional)")))
+                                .unwrap_or_default(),
                         );
                     });
                 }
@@ -192,11 +190,10 @@ impl ArgState {
                     value: (value, id),
                     possible,
                 } => {
-                    let required = self.required;
                     ComboBox::from_id_source(id)
                         .selected_text(value.clone())
                         .show_ui(ui, |ui| {
-                            if !required {
+                            if self.optional {
                                 ui.selectable_value(value, String::new(), "None");
                             }
                             for p in possible {
@@ -241,9 +238,9 @@ impl ArgState {
     pub fn cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
         match &self.kind {
             ArgKind::String { value, default } => {
-                match (&value[..], default, self.required) {
-                    ("", None, true) => return Err(format!("{} is required.", self.name)),
-                    ("", None, false) => {}
+                match (&value[..], default, self.optional) {
+                    ("", None, true) => {}
+                    ("", None, false) => return Err(format!("{} is required.", self.name)),
                     ("", Some(default), _) => {
                         if let Some(call_name) = self.call_name.as_ref() {
                             cmd.arg(call_name);
@@ -263,7 +260,7 @@ impl ArgState {
                     cmd.arg(
                         self.call_name
                             .as_ref()
-                            .ok_or_else(|| format!("Internal error."))?,
+                            .ok_or_else(|| "Internal error.".to_string())?,
                     );
                 }
             }
@@ -272,7 +269,7 @@ impl ArgState {
                     cmd.arg(
                         self.call_name
                             .as_ref()
-                            .ok_or_else(|| format!("Internal error."))?,
+                            .ok_or_else(|| "Internal error.".to_string())?,
                     );
                 }
             }
@@ -284,9 +281,9 @@ impl ArgState {
                     cmd.arg(value);
                 }
             }
-            ArgKind::Path { value, default, .. } => match (&value[..], default, self.required) {
-                ("", None, true) => return Err(format!("{} is required.", self.name)),
-                ("", None, false) => {}
+            ArgKind::Path { value, default, .. } => match (&value[..], default, self.optional) {
+                ("", None, true) => {}
+                ("", None, false) => return Err(format!("{} is required.", self.name)),
                 ("", Some(default), _) => {
                     if let Some(call_name) = self.call_name.as_ref() {
                         cmd.arg(call_name);
@@ -348,7 +345,8 @@ impl From<&Arg<'_>> for ArgState {
             .map(ToString::to_string)
             .or_else(|| a.get_about().map(ToString::to_string));
 
-        let required = a.is_set(ArgSettings::Required) | a.is_set(ArgSettings::ForbidEmptyValues);
+        let optional =
+            !a.is_set(ArgSettings::Required) && !a.is_set(ArgSettings::ForbidEmptyValues);
 
         use ValueHint::*;
         let kind = match (
@@ -407,10 +405,10 @@ impl From<&Arg<'_>> for ArgState {
             (false, false, _, None) => ArgKind::Bool(false),
             (false, _, _, Some(possible)) => ArgKind::Choose {
                 value: (
-                    if required {
-                        possible[0].to_string()
-                    } else {
+                    if optional {
                         "".into()
+                    } else {
+                        possible[0].to_string()
                     },
                     Uuid::new_v4(),
                 ),
@@ -426,7 +424,7 @@ impl From<&Arg<'_>> for ArgState {
             name: a.get_name().to_string().to_sentence_case(),
             call_name,
             desc,
-            required,
+            optional,
             kind,
         }
     }

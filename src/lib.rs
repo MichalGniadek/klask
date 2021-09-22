@@ -18,14 +18,16 @@ use std::{
     thread::{self},
 };
 
+pub struct ChildApp {
+    child: Child,
+    stdout: Option<Receiver<Option<String>>>,
+    stderr: Option<Receiver<Option<String>>>,
+}
+
 pub struct Klask {
     name: String,
-    child: Option<(
-        Child,
-        Option<Receiver<Option<String>>>,
-        Option<Receiver<Option<String>>>,
-    )>,
-    output: String,
+    child: Option<ChildApp>,
+    output: Result<String, String>,
     state: AppState,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
@@ -44,7 +46,7 @@ impl Klask {
                     let klask = Self {
                         name: app.get_name().to_string(),
                         child: None,
-                        output: String::new(),
+                        output: Ok(String::new()),
                         state: AppState::new(&app),
                         app,
                     };
@@ -70,7 +72,7 @@ impl Klask {
         });
     }
 
-    fn execute_command(&mut self) -> Result<(), String> {
+    fn execute_command(&mut self) -> Result<String, String> {
         let mut cmd = Command::new(
             std::env::current_exe().map_err(|_| String::from("Couldn't get current exe"))?,
         );
@@ -83,8 +85,6 @@ impl Klask {
                 if let Err(err) = self.app.clone().try_get_matches_from(cmd.get_args()) {
                     return Err(format!("Match error: {:?}  {:?}", err.kind, err.info));
                 }
-
-                self.output = String::new();
 
                 let mut child = cmd
                     .spawn()
@@ -130,99 +130,114 @@ impl Klask {
                     }
                 });
 
-                self.child = Some((child, Some(stdout_rx), Some(stderr_rx)));
-            }
-            Err(err) => {
-                self.output = err;
-            }
-        }
+                self.child = Some(ChildApp {
+                    child,
+                    stdout: Some(stdout_rx),
+                    stderr: Some(stderr_rx),
+                });
 
-        Ok(())
+                Ok(String::new())
+            }
+            Err(err) => Err(err),
+        }
     }
 
     fn update_output(&self, ui: &mut Ui) {
-        let output = cansi::categorise_text(&self.output);
-        for CategorisedSlice {
-            text,
-            fg_colour,
-            bg_colour,
-            intensity,
-            italic,
-            underline,
-            strikethrough,
-            ..
-        } in output
-        {
-            for span in LinkFinder::new().spans(text) {
-                match span.kind() {
-                    Some(LinkKind::Url) => ui.hyperlink(span.as_str()),
-                    Some(LinkKind::Email) => ui.hyperlink(format!("mailto:{}", span.as_str())),
-                    Some(_) | None => {
-                        let mut label =
-                            Label::new(span.as_str()).text_color(convert_color(fg_colour));
+        match &self.output {
+            Ok(output) => {
+                let output = cansi::categorise_text(output);
+                for CategorisedSlice {
+                    text,
+                    fg_colour,
+                    bg_colour,
+                    intensity,
+                    italic,
+                    underline,
+                    strikethrough,
+                    ..
+                } in output
+                {
+                    for span in LinkFinder::new().spans(text) {
+                        match span.kind() {
+                            Some(LinkKind::Url) => ui.hyperlink(span.as_str()),
+                            Some(LinkKind::Email) => {
+                                ui.hyperlink(format!("mailto:{}", span.as_str()))
+                            }
+                            Some(_) | None => {
+                                let mut label =
+                                    Label::new(span.as_str()).text_color(convert_color(fg_colour));
 
-                        if bg_colour != Color::Black {
-                            label = label.background_color(convert_color(bg_colour));
-                        }
+                                if bg_colour != Color::Black {
+                                    label = label.background_color(convert_color(bg_colour));
+                                }
 
-                        if italic {
-                            label = label.italics();
-                        }
+                                if italic {
+                                    label = label.italics();
+                                }
 
-                        if underline {
-                            label = label.underline();
-                        }
+                                if underline {
+                                    label = label.underline();
+                                }
 
-                        if strikethrough {
-                            label = label.strikethrough();
-                        }
+                                if strikethrough {
+                                    label = label.strikethrough();
+                                }
 
-                        label = match intensity {
-                            cansi::Intensity::Normal => label,
-                            cansi::Intensity::Bold => label.strong(),
-                            cansi::Intensity::Faint => label.weak(),
+                                label = match intensity {
+                                    cansi::Intensity::Normal => label,
+                                    cansi::Intensity::Bold => label.strong(),
+                                    cansi::Intensity::Faint => label.weak(),
+                                };
+
+                                ui.add(label)
+                            }
                         };
-
-                        ui.add(label)
                     }
-                };
+                }
+            }
+            Err(output) => {
+                ui.colored_label(Color32::RED, output);
             }
         }
     }
 
     fn read_output_from_child(&mut self) {
-        if let Some((_, stdout, stderr)) = &mut self.child {
-            if let Some(receiver) = stdout {
+        if let Some(child) = &mut self.child {
+            if let Some(receiver) = &mut child.stdout {
                 for line in receiver.try_iter() {
                     if let Some(line) = line {
-                        self.output.push_str(&line);
+                        if let Ok(output) = &mut self.output {
+                            output.push_str(&line);
+                        }
                     } else {
-                        *stdout = None;
+                        child.stdout = None;
                         break;
                     }
                 }
             }
 
-            if let Some(receiver) = stderr {
+            if let Some(receiver) = &mut child.stderr {
                 for line in receiver.try_iter() {
                     if let Some(line) = line {
-                        self.output.push_str(&line);
+                        if let Ok(output) = &mut self.output {
+                            output.push_str(&line);
+                        }
                     } else {
-                        *stderr = None;
+                        child.stderr = None;
                         break;
                     }
                 }
             }
 
-            if let (None, None) = (stdout, stderr) {
+            if child.stdout.is_none() && child.stderr.is_none() {
                 self.kill_child()
             }
         }
     }
 
     fn kill_child(&mut self) {
-        if let Some((child, _, _)) = &mut self.child {
-            let _ = child.kill();
+        if let Some(child) = &mut self.child {
+            let _ = child.child.kill();
             self.child = None;
         }
     }
@@ -244,12 +259,10 @@ impl epi::App for Klask {
                         .add(Button::new("Run!").enabled(self.child.is_none()))
                         .clicked()
                     {
-                        if let Err(err) = self.execute_command() {
-                            self.output = err;
-                        }
+                        self.output = self.execute_command();
                     }
 
-                    if let Some(_) = &mut self.child {
+                    if self.child.is_some() {
                         if ui.button("Kill").clicked() {
                             self.kill_child();
                         }
