@@ -23,6 +23,7 @@ pub struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,
     stderr: Option<Receiver<Option<String>>>,
+    output: String,
 }
 
 impl ChildApp {
@@ -38,17 +39,32 @@ impl ChildApp {
             child,
             stdout: Some(stdout),
             stderr: Some(stderr),
+            output: String::new(),
         })
     }
 
-    pub fn read(&mut self, output: &mut String) -> bool {
-        Self::read_stdio(&mut self.stdout, output);
-        Self::read_stdio(&mut self.stderr, output);
-        self.stdout.is_none() && self.stderr.is_none()
+    pub fn read(&mut self) -> &str {
+        let mut read = |stdio: &mut Option<Receiver<Option<String>>>| {
+            if let Some(receiver) = stdio {
+                for line in receiver.try_iter() {
+                    if let Some(line) = line {
+                        self.output.push_str(&line);
+                    } else {
+                        *stdio = None;
+                        return;
+                    }
+                }
+            }
+        };
+        read(&mut self.stdout);
+        read(&mut self.stderr);
+        &self.output
     }
 
     pub fn kill(&mut self) {
         let _ = self.child.kill();
+        self.stdout = None;
+        self.stderr = None;
     }
 
     fn spawn_thread_reader<R: Read + Send + Sync + 'static>(stdio: R) -> Receiver<Option<String>> {
@@ -67,19 +83,6 @@ impl ChildApp {
             }
         });
         rx
-    }
-
-    fn read_stdio(stdio: &mut Option<Receiver<Option<String>>>, output: &mut String) {
-        if let Some(receiver) = stdio {
-            for line in receiver.try_iter() {
-                if let Some(line) = line {
-                    output.push_str(&line);
-                } else {
-                    *stdio = None;
-                    return;
-                }
-            }
-        }
     }
 }
 
@@ -115,7 +118,7 @@ pub enum ExecuteError {
     IoError(#[from] std::io::Error),
     #[error("Internal error: no name in validation")]
     NoValidationName,
-    #[error("Internal match error:")]
+    #[error("Internal match error: {0}")]
     MatchError(clap::Error),
     #[error("Internal error: no child stdout or stderr")]
     NoStdoutOrStderr,
@@ -147,9 +150,14 @@ impl From<clap::Error> for ExecuteError {
     }
 }
 
+impl From<String> for ExecuteError {
+    fn from(str: String) -> Self {
+        Self::GuiError(str)
+    }
+}
+
 pub struct Klask {
-    child: Option<ChildApp>,
-    output: Result<String, ExecuteError>,
+    output: Option<Result<ChildApp, ExecuteError>>,
     state: AppState,
     validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
@@ -160,13 +168,15 @@ pub struct Klask {
 // Public interface
 impl Klask {
     pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
+        // Wrap app in another in case no arguments is a valid configuration
         match App::new("outer").subcommand(app.clone()).try_get_matches() {
             Ok(matches) => match matches.subcommand_matches(app.get_name()) {
+                // Called with arguments -> start user program
                 Some(m) => f(m),
+                // Called with no arguments -> start gui
                 None => {
                     let klask = Self {
-                        child: None,
-                        output: Ok(String::new()),
+                        output: None,
                         state: AppState::new(&app),
                         validation_error: None,
                         app,
@@ -176,7 +186,7 @@ impl Klask {
                 }
             },
             Err(err) => panic!(
-                "Internal error, arguments should've been verified by the GUI app {:#?}",
+                "Internal error, arguments should've been empty or verified by the GUI app {:#?}",
                 err
             ),
         }
@@ -195,42 +205,38 @@ impl Klask {
 }
 
 impl Klask {
-    fn execute_command(&mut self) -> Result<(), ExecuteError> {
+    fn execute(&mut self) -> Result<ChildApp, ExecuteError> {
+        // Call the same executable, with subcommand equal to inner app's name
         let mut cmd = Command::new(std::env::current_exe()?);
         cmd.arg(self.app.get_name());
+        let mut cmd = self.state.set_cmd_args(cmd)?;
 
-        match self.state.set_cmd_args(cmd) {
-            Ok(mut cmd) => {
-                // Check for validation errors
-                self.app.clone().try_get_matches_from(cmd.get_args())?;
-                self.child = Some(ChildApp::run(&mut cmd)?);
-                Ok(())
-            }
-            Err(err) => Err(ExecuteError::GuiError(err)),
-        }
+        // Check for validation errors
+        self.app.clone().try_get_matches_from(cmd.get_args())?;
+
+        ChildApp::run(&mut cmd)
     }
 
-    fn update_output(&self, ui: &mut Ui) {
-        match &self.output {
-            Ok(output) => ui.ansi_label(output),
-            Err(output) => {
-                ui.colored_label(Color32::RED, output.to_string());
+    fn update_output(&mut self, ui: &mut Ui) {
+        match &mut self.output {
+            Some(Ok(c)) => ui.ansi_label(c.read()),
+            Some(Err(err)) => {
+                ui.colored_label(Color32::RED, err.to_string());
             }
-        }
-    }
-
-    fn read_output_from_child(&mut self) {
-        if let (Some(child), Ok(output)) = (&mut self.child, &mut self.output) {
-            if child.read(output) {
-                self.kill_child();
-            }
+            _ => {}
         }
     }
 
     fn kill_child(&mut self) {
-        if let Some(child) = &mut self.child {
+        if let Some(Ok(child)) = &mut self.output {
             child.kill();
-            self.child = None;
+        }
+    }
+
+    fn is_child_running(&self) -> bool {
+        match &self.output {
+            Some(Ok(c)) => c.stdout.is_some() || c.stderr.is_some(),
+            _ => false,
         }
     }
 }
@@ -242,25 +248,25 @@ impl epi::App for Klask {
 
     fn update(&mut self, ctx: &eframe::egui::CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.style_mut().spacing.text_edit_width = f32::MAX;
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-                ui.style_mut().spacing.text_edit_width = f32::MAX;
                 self.state.update(ui, &mut self.validation_error);
 
                 ui.horizontal(|ui| {
                     if ui
-                        .add(Button::new("Run!").enabled(self.child.is_none()))
+                        .add(Button::new("Run!").enabled(!self.is_child_running()))
                         .clicked()
                     {
-                        self.output = self.execute_command().map(|()| String::new());
+                        self.output = Some(self.execute());
                         self.validation_error =
-                            if let Err(ExecuteError::ValidationError(info)) = &self.output {
+                            if let Some(Err(ExecuteError::ValidationError(info))) = &self.output {
                                 Some(info.clone())
                             } else {
                                 None
                             };
                     }
 
-                    if self.child.is_some() {
+                    if self.is_child_running() {
                         if ui.button("Kill").clicked() {
                             self.kill_child();
                         }
@@ -273,7 +279,6 @@ impl epi::App for Klask {
                     }
                 });
 
-                self.read_output_from_child();
                 self.update_output(ui);
             });
         });

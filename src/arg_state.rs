@@ -64,10 +64,11 @@ impl ArgState {
                         |ui| {
                             let text = ui.text_edit_singleline_hint(
                                 value,
-                                default
-                                    .clone()
-                                    .or_else(|| self.optional.then(|| String::from("(Optional)")))
-                                    .unwrap_or_default(),
+                                match (default, self.optional) {
+                                    (Some(default), _) => default.as_str(),
+                                    (_, true) => "(Optional)",
+                                    (_, false) => "",
+                                },
                             );
 
                             if let Some(message) = validation_error.is(&self.name) {
