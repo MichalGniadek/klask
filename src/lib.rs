@@ -42,28 +42,8 @@ impl ChildApp {
     }
 
     pub fn read(&mut self, output: &mut String) -> bool {
-        if let Some(receiver) = &mut self.stdout {
-            for line in receiver.try_iter() {
-                if let Some(line) = line {
-                    output.push_str(&line);
-                } else {
-                    self.stdout = None;
-                    break;
-                }
-            }
-        }
-
-        if let Some(receiver) = &mut self.stderr {
-            for line in receiver.try_iter() {
-                if let Some(line) = line {
-                    output.push_str(&line);
-                } else {
-                    self.stderr = None;
-                    break;
-                }
-            }
-        }
-
+        Self::read_stdio(&mut self.stdout, output);
+        Self::read_stdio(&mut self.stderr, output);
         self.stdout.is_none() && self.stderr.is_none()
     }
 
@@ -87,6 +67,19 @@ impl ChildApp {
             }
         });
         rx
+    }
+
+    fn read_stdio(stdio: &mut Option<Receiver<Option<String>>>, output: &mut String) {
+        if let Some(receiver) = stdio {
+            for line in receiver.try_iter() {
+                if let Some(line) = line {
+                    output.push_str(&line);
+                } else {
+                    *stdio = None;
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -316,6 +309,16 @@ trait MyUi {
     fn error_style_if<F: FnOnce(&mut Ui) -> R, R>(&mut self, error: bool, f: F) -> R;
     fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response;
     fn ansi_label(&mut self, text: &str);
+    fn multiple_values<T, F>(
+        &mut self,
+        validation_error: &mut Option<ValidationErrorInfo>,
+        name: &str,
+        values: &mut Vec<T>,
+        default: Option<&mut Vec<T>>,
+        f: F,
+    ) where
+        T: Clone + Default,
+        F: FnMut(&mut Ui, &mut T) -> Response;
 }
 
 impl MyUi for Ui {
@@ -391,6 +394,56 @@ impl MyUi for Ui {
                         self.add(label)
                     }
                 };
+            }
+        }
+    }
+
+    fn multiple_values<T, F>(
+        &mut self,
+        validation_error: &mut Option<ValidationErrorInfo>,
+        name: &str,
+        values: &mut Vec<T>,
+        default: Option<&mut Vec<T>>,
+        mut f: F,
+    ) where
+        T: Clone + Default,
+        F: FnMut(&mut Ui, &mut T) -> Response,
+    {
+        let list = self.vertical(|ui| {
+            ui.error_style_if(validation_error.is(name).is_some(), |ui| {
+                let mut remove_index = None;
+
+                for (index, value) in values.iter_mut().enumerate() {
+                    ui.horizontal(|ui| {
+                        if ui.small_button("-").clicked() {
+                            remove_index = Some(index);
+                        }
+
+                        f(ui, value);
+                    });
+                }
+
+                if let Some(index) = remove_index {
+                    values.remove(index);
+                }
+
+                ui.horizontal(|ui| {
+                    if ui.button("New value").clicked() {
+                        values.push(T::default());
+                    }
+                    if let Some(default) = default {
+                        ui.add_space(20.0);
+                        if ui.button("Reset to default").clicked() {
+                            *values = default.clone();
+                        }
+                    }
+                });
+            })
+        });
+
+        if let Some(message) = validation_error.is(name) {
+            if list.response.on_hover_text(message).changed() {
+                *validation_error = None;
             }
         }
     }

@@ -70,8 +70,6 @@ impl AppState {
         if let Some(current) = &self.current {
             cmd.arg(current);
             self.subcommands[current].set_cmd_args(cmd)
-        } else if !self.subcommands.is_empty() {
-            Err("Internal error.".to_string())
         } else {
             Ok(cmd)
         }

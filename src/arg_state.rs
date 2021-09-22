@@ -103,39 +103,13 @@ impl ArgState {
                     ui.checkbox(bool, "");
                 }
                 ArgKind::MultipleStrings { values, default } => {
-                    let list = ui.vertical(|ui| {
-                        ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
-                            let mut remove_index = None;
-                            for (index, value) in values.iter_mut().enumerate() {
-                                ui.horizontal(|ui| {
-                                    if ui.small_button("-").clicked() {
-                                        remove_index = Some(index);
-                                    }
-                                    ui.text_edit_singleline(value);
-                                });
-                            }
-
-                            if let Some(index) = remove_index {
-                                values.remove(index);
-                            }
-
-                            ui.horizontal(|ui| {
-                                if ui.button("New value").clicked() {
-                                    values.push(String::new());
-                                }
-                                ui.add_space(20.0);
-                                if ui.button("Reset to default").clicked() {
-                                    *values = default.clone();
-                                }
-                            });
-                        });
-                    });
-
-                    if let Some(message) = validation_error.is(&self.name) {
-                        if list.response.on_hover_text(message).changed() {
-                            *validation_error = None;
-                        }
-                    }
+                    ui.multiple_values(
+                        validation_error,
+                        &self.name,
+                        values,
+                        Some(default),
+                        |ui, value| ui.text_edit_singleline(value),
+                    );
                 }
                 ArgKind::Path {
                     value,
@@ -166,6 +140,7 @@ impl ArgState {
 
                     ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
                         let text = ui.text_edit_singleline(value);
+
                         if let Some(message) = validation_error.is(&self.name) {
                             if text.on_hover_text(message).changed() {
                                 *validation_error = None;
@@ -178,57 +153,31 @@ impl ArgState {
                     default,
                     allow_dir,
                     allow_file,
-                } => {
-                    let list = ui.vertical(|ui| {
-                        ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
-                            let mut remove_index = None;
-                            for (index, value) in values.iter_mut().enumerate() {
-                                ui.horizontal(|ui| {
-                                    if ui.small_button("-").clicked() {
-                                        remove_index = Some(index);
-                                    }
-
-                                    if *allow_file && ui.button("Select file...").clicked() {
-                                        if let Some(file) =
-                                            FileDialog::new().show_open_single_file().ok().flatten()
-                                        {
-                                            *value = file.to_string_lossy().into_owned();
-                                        }
-                                    }
-
-                                    if *allow_dir && ui.button("Select directory...").clicked() {
-                                        if let Some(file) =
-                                            FileDialog::new().show_open_single_dir().ok().flatten()
-                                        {
-                                            *value = file.to_string_lossy().into_owned();
-                                        }
-                                    }
-                                    ui.text_edit_singleline(value);
-                                });
+                } => ui.multiple_values(
+                    validation_error,
+                    &self.name,
+                    values,
+                    Some(default),
+                    |ui, value| {
+                        if *allow_file && ui.button("Select file...").clicked() {
+                            if let Some(file) =
+                                FileDialog::new().show_open_single_file().ok().flatten()
+                            {
+                                *value = file.to_string_lossy().into_owned();
                             }
+                        };
 
-                            if let Some(index) = remove_index {
-                                values.remove(index);
+                        if *allow_dir && ui.button("Select directory...").clicked() {
+                            if let Some(file) =
+                                FileDialog::new().show_open_single_dir().ok().flatten()
+                            {
+                                *value = file.to_string_lossy().into_owned();
                             }
+                        };
 
-                            ui.horizontal(|ui| {
-                                if ui.button("New value").clicked() {
-                                    values.push(String::new());
-                                }
-                                ui.add_space(20.0);
-                                if ui.button("Reset to default").clicked() {
-                                    *values = default.clone();
-                                }
-                            });
-                        });
-                    });
-
-                    if let Some(message) = validation_error.is(&self.name) {
-                        if list.response.on_hover_text(message).changed() {
-                            *validation_error = None;
-                        }
-                    }
-                }
+                        ui.text_edit_singleline(value)
+                    },
+                ),
                 ArgKind::Choose {
                     value: (value, id),
                     possible,
@@ -247,33 +196,22 @@ impl ArgState {
                 ArgKind::MultipleChoose {
                     values,
                     ref possible,
-                } => {
-                    ui.vertical(|ui| {
-                        let mut remove_index = None;
-                        for (index, (value, id)) in values.iter_mut().enumerate() {
-                            ui.horizontal(|ui| {
-                                if ui.small_button("-").clicked() {
-                                    remove_index = Some(index);
+                } => ui.multiple_values(
+                    validation_error,
+                    &self.name,
+                    values,
+                    None,
+                    |ui, (value, id)| {
+                        ComboBox::from_id_source(id)
+                            .selected_text(value.clone())
+                            .show_ui(ui, |ui| {
+                                for p in possible {
+                                    ui.selectable_value(value, p.clone(), p);
                                 }
-                                ComboBox::from_id_source(id)
-                                    .selected_text(value.clone())
-                                    .show_ui(ui, |ui| {
-                                        for p in possible {
-                                            ui.selectable_value(value, p.clone(), p);
-                                        }
-                                    });
-                            });
-                        }
-
-                        if let Some(index) = remove_index {
-                            values.remove(index);
-                        }
-
-                        if ui.button("New value").clicked() {
-                            values.push((String::new(), Uuid::new_v4()));
-                        }
-                    });
-                }
+                            })
+                            .response
+                    },
+                ),
             };
         });
     }
