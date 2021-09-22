@@ -2,12 +2,12 @@ use crate::arg_state::ArgState;
 use clap::App;
 use eframe::egui::Ui;
 use inflector::Inflector;
-use std::{collections::HashMap, process::Command};
+use std::{collections::BTreeMap, process::Command};
 
 pub struct AppState {
     about: Option<String>,
     args: Vec<ArgState>,
-    subcommands: HashMap<String, AppState>,
+    subcommands: BTreeMap<String, AppState>,
     current: Option<String>,
 }
 

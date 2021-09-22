@@ -55,9 +55,9 @@ pub struct Walk {
 fn main() {
     Klask::run_derived::<Opts, _>(|o| {
         println!("{:#?}", o);
-        loop {
+        for _ in 0..5 {
             thread::sleep(time::Duration::from_secs(1));
-            println!("A");
+            eprintln!("A");
         }
     });
     // Klask::run_app(

@@ -20,7 +20,11 @@ use std::{
 
 pub struct Klask {
     name: String,
-    child: Option<(Child, Receiver<String>)>,
+    child: Option<(
+        Child,
+        Option<Receiver<Option<String>>>,
+        Option<Receiver<Option<String>>>,
+    )>,
     output: String,
     state: AppState,
 }
@@ -94,35 +98,35 @@ impl Klask {
                         .ok_or_else(|| String::from("Couldn't take stderr"))?,
                 );
 
-                let (tx, rx) = mpsc::channel();
-
-                let stdout_tx = tx.clone();
+                let (stdout_tx, stdout_rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
                     if let Ok(0) = stdout_reader.read_line(&mut output) {
                         // End of output
+                        let _ = stdout_tx.send(None);
                         break;
                     }
-                    if stdout_tx.send(output).is_err() {
+                    if stdout_tx.send(Some(output)).is_err() {
                         // Send returns error only if data will never be received
                         break;
                     }
                 });
 
-                let stderr_tx = tx;
+                let (stderr_tx, stderr_rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
                     if let Ok(0) = stderr_reader.read_line(&mut output) {
                         // End of output
+                        let _ = stderr_tx.send(None);
                         break;
                     }
-                    if stderr_tx.send(output).is_err() {
+                    if stderr_tx.send(Some(output)).is_err() {
                         // Send returns error only if data will never be received
                         break;
                     }
                 });
 
-                self.child = Some((child, rx));
+                self.child = Some((child, Some(stdout_rx), Some(stderr_rx)));
             }
             Err(()) => {
                 self.output = String::from("Incorrect");
@@ -181,6 +185,13 @@ impl Klask {
             }
         }
     }
+
+    fn kill_child(&mut self) {
+        if let Some((child, _, _)) = &mut self.child {
+            let _ = child.kill();
+            self.child = None;
+        }
+    }
 }
 
 impl epi::App for Klask {
@@ -203,19 +214,44 @@ impl epi::App for Klask {
                         }
                     }
 
-                    if let Some((child, _)) = &mut self.child {
+                    if let Some(_) = &mut self.child {
                         if ui.button("Kill").clicked() {
-                            let _ = child.kill();
-                            self.child = None;
+                            self.kill_child();
                         }
 
-                        ui.label("Running...");
+                        let mut running_test = String::from("Running");
+                        for _ in 0..((2.0 * ui.input().time) as i32 % 4) {
+                            running_test.push('.')
+                        }
+                        ui.label(running_test);
                     }
                 });
 
-                if let Some((_, receiver)) = &mut self.child {
-                    for line in receiver.try_iter() {
-                        self.output.push_str(&line);
+                if let Some((_, stdout, stderr)) = &mut self.child {
+                    if let Some(receiver) = stdout {
+                        for line in receiver.try_iter() {
+                            if let Some(line) = line {
+                                self.output.push_str(&line);
+                            } else {
+                                *stdout = None;
+                                break;
+                            }
+                        }
+                    }
+
+                    if let Some(receiver) = stderr {
+                        for line in receiver.try_iter() {
+                            if let Some(line) = line {
+                                self.output.push_str(&line);
+                            } else {
+                                *stderr = None;
+                                break;
+                            }
+                        }
+                    }
+
+                    if let (None, None) = (stdout, stderr) {
+                        self.kill_child()
                     }
                 }
 
@@ -225,10 +261,7 @@ impl epi::App for Klask {
     }
 
     fn on_exit(&mut self) {
-        if let Some((child, _)) = &mut self.child {
-            let _ = child.kill();
-            self.child = None;
-        }
+        self.kill_child()
     }
 }
 
