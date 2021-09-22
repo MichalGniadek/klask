@@ -10,12 +10,13 @@ use eframe::{
     egui::{self, Button, Color32, Label, Response, TextEdit, Ui},
     epi,
 };
+use inflector::Inflector;
 use linkify::{LinkFinder, LinkKind};
 use std::{
     io::{BufRead, BufReader},
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver},
-    thread::{self},
+    thread,
 };
 
 pub struct ChildApp {
@@ -29,6 +30,7 @@ pub struct Klask {
     child: Option<ChildApp>,
     output: Result<String, String>,
     state: AppState,
+    validation_error: Option<(String, String)>,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
     app: App<'static>,
@@ -48,6 +50,7 @@ impl Klask {
                         child: None,
                         output: Ok(String::new()),
                         state: AppState::new(&app),
+                        validation_error: None,
                         app,
                     };
                     let native_options = eframe::NativeOptions::default();
@@ -82,8 +85,23 @@ impl Klask {
 
         match self.state.cmd_args(cmd) {
             Ok(mut cmd) => {
-                if let Err(err) = self.app.clone().try_get_matches_from(cmd.get_args()) {
-                    return Err(format!("Match error: {:?}  {:?}", err.kind, err.info));
+                self.validation_error = None;
+
+                if let Err(mut err) = self.app.clone().try_get_matches_from(cmd.get_args()) {
+                    match err.kind {
+                        clap::ErrorKind::ValueValidation => {
+                            let start =
+                                err.info[0].find('<').ok_or_else(|| "Internal error, '<'")?;
+                            let end = err.info[0].find('>').ok_or_else(|| "Internal error, '>'")?;
+                            let name = err.info[0][(start + 1)..end].to_sentence_case();
+
+                            let ret =
+                                Err(format!("Validation error in {}: {:?}", name, err.info[2]));
+                            self.validation_error = Some((name, err.info.swap_remove(2)));
+                            return ret;
+                        }
+                        _ => return Err(format!("Match error: {:?}  {:?}", err.kind, err.info)),
+                    }
                 }
 
                 let mut child = cmd
@@ -252,7 +270,7 @@ impl epi::App for Klask {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
                 ui.style_mut().spacing.text_edit_width = f32::MAX;
-                self.state.update(ui);
+                self.state.update(ui, &mut self.validation_error);
 
                 ui.horizontal(|ui| {
                     if ui

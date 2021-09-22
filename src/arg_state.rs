@@ -48,8 +48,12 @@ pub enum ArgKind {
 }
 
 impl ArgState {
-    pub fn update(&mut self, ui: &mut Ui) {
+    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<(String, String)>) {
         ui.horizontal(|ui| {
+            let is_validation_error = validation_error
+                .as_ref()
+                .map_or(false, |(name, _)| name == &self.name);
+
             let label = ui.label(&self.name);
 
             if let Some(desc) = &self.desc {
@@ -58,56 +62,94 @@ impl ArgState {
 
             match &mut self.kind {
                 ArgKind::String { value, default } => {
-                    ui.error_style_if(!self.optional && value.is_empty(), |ui| {
-                        ui.text_edit_singleline_hint(
-                            value,
-                            default
-                                .clone()
-                                .or_else(|| self.optional.then(|| String::from("(Optional)")))
-                                .unwrap_or_default(),
-                        );
-                    });
+                    ui.error_style_if(
+                        (!self.optional && value.is_empty()) || is_validation_error,
+                        |ui| {
+                            let text = ui.text_edit_singleline_hint(
+                                value,
+                                default
+                                    .clone()
+                                    .or_else(|| self.optional.then(|| String::from("(Optional)")))
+                                    .unwrap_or_default(),
+                            );
+
+                            if is_validation_error {
+                                if text
+                                    .on_hover_text(&validation_error.as_ref().unwrap().1)
+                                    .changed()
+                                {
+                                    *validation_error = None;
+                                }
+                            }
+                        },
+                    );
                 }
                 ArgKind::Occurences(i) => {
-                    ui.horizontal(|ui| {
+                    let list = ui.horizontal(|ui| {
                         if ui.small_button("-").clicked() {
                             *i = (*i - 1).max(0);
                         }
-                        ui.label(i.to_string());
+
+                        ui.error_style_if(is_validation_error, |ui| {
+                            ui.label(i.to_string());
+                        });
+
                         if ui.small_button("+").clicked() {
                             *i += 1;
                         }
                     });
+
+                    if is_validation_error {
+                        if list
+                            .response
+                            .on_hover_text(&validation_error.as_ref().unwrap().1)
+                            .changed()
+                        {
+                            *validation_error = None;
+                        }
+                    }
                 }
                 ArgKind::Bool(bool) => {
                     ui.checkbox(bool, "");
                 }
                 ArgKind::MultipleStrings { values, default } => {
-                    ui.vertical(|ui| {
-                        let mut remove_index = None;
-                        for (index, value) in values.iter_mut().enumerate() {
+                    let list = ui.vertical(|ui| {
+                        ui.error_style_if(is_validation_error, |ui| {
+                            let mut remove_index = None;
+                            for (index, value) in values.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    if ui.small_button("-").clicked() {
+                                        remove_index = Some(index);
+                                    }
+                                    ui.text_edit_singleline(value);
+                                });
+                            }
+
+                            if let Some(index) = remove_index {
+                                values.remove(index);
+                            }
+
                             ui.horizontal(|ui| {
-                                if ui.small_button("-").clicked() {
-                                    remove_index = Some(index);
+                                if ui.button("New value").clicked() {
+                                    values.push(String::new());
                                 }
-                                ui.text_edit_singleline(value);
+                                ui.add_space(20.0);
+                                if ui.button("Reset to default").clicked() {
+                                    *values = default.clone();
+                                }
                             });
-                        }
-
-                        if let Some(index) = remove_index {
-                            values.remove(index);
-                        }
-
-                        ui.horizontal(|ui| {
-                            if ui.button("New value").clicked() {
-                                values.push(String::new());
-                            }
-                            ui.add_space(20.0);
-                            if ui.button("Reset to default").clicked() {
-                                *values = default.clone();
-                            }
-                        })
+                        });
                     });
+
+                    if is_validation_error {
+                        if list
+                            .response
+                            .on_hover_text(&validation_error.as_ref().unwrap().1)
+                            .changed()
+                        {
+                            *validation_error = None;
+                        }
+                    }
                 }
                 ArgKind::Path {
                     value,
@@ -136,7 +178,17 @@ impl ArgState {
                         }
                     }
 
-                    ui.text_edit_singleline(value);
+                    ui.error_style_if(is_validation_error, |ui| {
+                        let text = ui.text_edit_singleline(value);
+                        if is_validation_error {
+                            if text
+                                .on_hover_text(&validation_error.as_ref().unwrap().1)
+                                .changed()
+                            {
+                                *validation_error = None;
+                            }
+                        }
+                    });
                 }
                 ArgKind::MultiplePaths {
                     values,
@@ -144,47 +196,59 @@ impl ArgState {
                     allow_dir,
                     allow_file,
                 } => {
-                    ui.vertical(|ui| {
-                        let mut remove_index = None;
-                        for (index, value) in values.iter_mut().enumerate() {
+                    let list = ui.vertical(|ui| {
+                        ui.error_style_if(is_validation_error, |ui| {
+                            let mut remove_index = None;
+                            for (index, value) in values.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    if ui.small_button("-").clicked() {
+                                        remove_index = Some(index);
+                                    }
+
+                                    if *allow_file && ui.button("Select file...").clicked() {
+                                        if let Some(file) =
+                                            FileDialog::new().show_open_single_file().ok().flatten()
+                                        {
+                                            *value = file.to_string_lossy().into_owned();
+                                        }
+                                    }
+
+                                    if *allow_dir && ui.button("Select directory...").clicked() {
+                                        if let Some(file) =
+                                            FileDialog::new().show_open_single_dir().ok().flatten()
+                                        {
+                                            *value = file.to_string_lossy().into_owned();
+                                        }
+                                    }
+                                    ui.text_edit_singleline(value);
+                                });
+                            }
+
+                            if let Some(index) = remove_index {
+                                values.remove(index);
+                            }
+
                             ui.horizontal(|ui| {
-                                if ui.small_button("-").clicked() {
-                                    remove_index = Some(index);
+                                if ui.button("New value").clicked() {
+                                    values.push(String::new());
                                 }
-
-                                if *allow_file && ui.button("Select file...").clicked() {
-                                    if let Some(file) =
-                                        FileDialog::new().show_open_single_file().ok().flatten()
-                                    {
-                                        *value = file.to_string_lossy().into_owned();
-                                    }
+                                ui.add_space(20.0);
+                                if ui.button("Reset to default").clicked() {
+                                    *values = default.clone();
                                 }
-
-                                if *allow_dir && ui.button("Select directory...").clicked() {
-                                    if let Some(file) =
-                                        FileDialog::new().show_open_single_dir().ok().flatten()
-                                    {
-                                        *value = file.to_string_lossy().into_owned();
-                                    }
-                                }
-                                ui.text_edit_singleline(value);
                             });
-                        }
-
-                        if let Some(index) = remove_index {
-                            values.remove(index);
-                        }
-
-                        ui.horizontal(|ui| {
-                            if ui.button("New value").clicked() {
-                                values.push(String::new());
-                            }
-                            ui.add_space(20.0);
-                            if ui.button("Reset to default").clicked() {
-                                *values = default.clone();
-                            }
-                        })
+                        });
                     });
+
+                    if is_validation_error {
+                        if list
+                            .response
+                            .on_hover_text(&validation_error.as_ref().unwrap().1)
+                            .changed()
+                        {
+                            *validation_error = None;
+                        }
+                    }
                 }
                 ArgKind::Choose {
                     value: (value, id),
@@ -308,10 +372,12 @@ impl ArgState {
             ArgKind::Choose {
                 value: (value, _), ..
             } => {
-                if let Some(call_name) = self.call_name.as_ref() {
-                    cmd.arg(call_name);
+                if !value.is_empty() {
+                    if let Some(call_name) = self.call_name.as_ref() {
+                        cmd.arg(call_name);
+                    }
+                    cmd.arg(value);
                 }
-                cmd.arg(value);
             }
             ArgKind::MultipleChoose { values, .. } => {
                 for (value, _) in values {
