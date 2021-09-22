@@ -28,7 +28,10 @@ impl AppState {
             about: app.get_about().map(String::from),
             args,
             subcommands,
-            current: None,
+            current: app
+                .get_subcommands()
+                .map(|app| app.get_name().to_string())
+                .next(),
         }
     }
 
@@ -56,7 +59,7 @@ impl AppState {
         }
     }
 
-    pub fn cmd_args(&self, mut cmd: Command) -> Result<Command, ()> {
+    pub fn cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
         for arg in &self.args {
             cmd = arg.cmd_args(cmd)?;
         }
@@ -65,7 +68,7 @@ impl AppState {
             cmd.arg(current);
             self.subcommands[current].cmd_args(cmd)
         } else if !self.subcommands.is_empty() {
-            Err(())
+            Err(format!("Internal error."))
         } else {
             Ok(cmd)
         }

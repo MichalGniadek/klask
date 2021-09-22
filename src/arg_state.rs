@@ -1,3 +1,4 @@
+use crate::MyUi;
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, TextEdit, Ui};
 use inflector::Inflector;
@@ -49,7 +50,7 @@ pub enum ArgKind {
 impl ArgState {
     pub fn update(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            let label = ui.label(&self.name.to_sentence_case());
+            let label = ui.label(&self.name);
 
             if let Some(desc) = &self.desc {
                 label.on_hover_text(desc);
@@ -57,15 +58,18 @@ impl ArgState {
 
             match &mut self.kind {
                 ArgKind::String { value, default } => {
-                    ui.add(
-                        TextEdit::singleline(value)
-                            .hint_text(default.clone().unwrap_or(if self.required {
-                                String::new()
-                            } else {
-                                String::from("(Optional)")
-                            }))
-                            .desired_width(f32::MAX),
-                    );
+                    let required = self.required;
+                    ui.error_style_if(self.required && value.is_empty(), |ui| {
+                        ui.add(
+                            TextEdit::singleline(value)
+                                .hint_text(default.clone().unwrap_or(if required {
+                                    String::new()
+                                } else {
+                                    String::from("(Optional)")
+                                }))
+                                .desired_width(f32::MAX),
+                        );
+                    });
                 }
                 ArgKind::Occurences(i) => {
                     ui.horizontal(|ui| {
@@ -236,11 +240,11 @@ impl ArgState {
         });
     }
 
-    pub fn cmd_args(&self, mut cmd: Command) -> Result<Command, ()> {
+    pub fn cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
         match &self.kind {
             ArgKind::String { value, default } => {
                 match (&value[..], default, self.required) {
-                    ("", None, true) => return Err(()),
+                    ("", None, true) => return Err(format!("{} is required.", self.name)),
                     ("", None, false) => {}
                     ("", Some(default), _) => {
                         if let Some(call_name) = self.call_name.as_ref() {
@@ -258,12 +262,20 @@ impl ArgState {
             }
             &ArgKind::Occurences(i) => {
                 for _ in 0..i {
-                    cmd.arg(self.call_name.as_ref().ok_or(())?);
+                    cmd.arg(
+                        self.call_name
+                            .as_ref()
+                            .ok_or_else(|| format!("Internal error."))?,
+                    );
                 }
             }
             &ArgKind::Bool(bool) => {
                 if bool {
-                    cmd.arg(self.call_name.as_ref().ok_or(())?);
+                    cmd.arg(
+                        self.call_name
+                            .as_ref()
+                            .ok_or_else(|| format!("Internal error."))?,
+                    );
                 }
             }
             ArgKind::MultipleStrings { values, .. } => {
@@ -275,7 +287,7 @@ impl ArgState {
                 }
             }
             ArgKind::Path { value, default, .. } => match (&value[..], default, self.required) {
-                ("", None, true) => return Err(()),
+                ("", None, true) => return Err(format!("{} is required.", self.name)),
                 ("", None, false) => {}
                 ("", Some(default), _) => {
                     if let Some(call_name) = self.call_name.as_ref() {
@@ -301,16 +313,10 @@ impl ArgState {
             ArgKind::Choose {
                 value: (value, _), ..
             } => {
-                match (&value[..], self.required) {
-                    ("", true) => return Err(()),
-                    ("", false) => {}
-                    (value, _) => {
-                        if let Some(call_name) = self.call_name.as_ref() {
-                            cmd.arg(call_name);
-                        }
-                        cmd.arg(value);
-                    }
-                };
+                if let Some(call_name) = self.call_name.as_ref() {
+                    cmd.arg(call_name);
+                }
+                cmd.arg(value);
             }
             ArgKind::MultipleChoose { values, .. } => {
                 for (value, _) in values {
@@ -419,7 +425,7 @@ impl From<&Arg<'_>> for ArgState {
         };
 
         Self {
-            name: a.get_name().to_string(),
+            name: a.get_name().to_string().to_sentence_case(),
             call_name,
             desc,
             required,

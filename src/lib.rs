@@ -132,8 +132,8 @@ impl Klask {
 
                 self.child = Some((child, Some(stdout_rx), Some(stderr_rx)));
             }
-            Err(()) => {
-                self.output = String::from("Incorrect");
+            Err(err) => {
+                self.output = err;
             }
         }
 
@@ -290,5 +290,36 @@ fn convert_color(color: Color) -> Color32 {
         Color::BrightMagenta => Color32::from_rgb(214, 112, 214),
         Color::BrightCyan => Color32::from_rgb(41, 184, 219),
         Color::BrightWhite => Color32::from_rgb(229, 229, 229),
+    }
+}
+
+trait MyUi {
+    fn error_style_if(&mut self, error: bool, f: impl FnOnce(&mut Ui));
+}
+
+impl MyUi for Ui {
+    fn error_style_if(&mut self, error: bool, f: impl FnOnce(&mut Ui)) {
+        let previous = if error {
+            let visuals = &mut self.style_mut().visuals;
+            let previous = visuals.clone();
+
+            visuals.widgets.inactive.bg_stroke.color = Color32::RED;
+            visuals.widgets.inactive.bg_stroke.width = 1.0;
+            visuals.widgets.hovered.bg_stroke.color = Color32::RED;
+            visuals.widgets.active.bg_stroke.color = Color32::RED;
+            visuals.widgets.open.bg_stroke.color = Color32::RED;
+            visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
+            visuals.selection.stroke.color = Color32::RED;
+
+            Some(previous)
+        } else {
+            None
+        };
+
+        f(self);
+
+        if let Some(previous) = previous {
+            self.style_mut().visuals = previous;
+        }
     }
 }
