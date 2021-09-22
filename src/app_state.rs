@@ -32,13 +32,13 @@ impl AppState {
         }
     }
 
-    pub fn update(&mut self, ui: &mut Ui, id: &mut usize) {
+    pub fn update(&mut self, ui: &mut Ui) {
         if let Some(ref about) = self.about {
             ui.label(about);
         }
 
         for arg in &mut self.args {
-            arg.update(ui, id);
+            arg.update(ui);
         }
 
         ui.horizontal(|ui| {
@@ -52,7 +52,7 @@ impl AppState {
         });
 
         if let Some(current) = &self.current {
-            self.subcommands.get_mut(current).unwrap().update(ui, id);
+            self.subcommands.get_mut(current).unwrap().update(ui);
         }
     }
 

@@ -3,6 +3,7 @@ use eframe::egui::{ComboBox, TextEdit, Ui};
 use inflector::Inflector;
 use native_dialog::FileDialog;
 use std::process::Command;
+use uuid::Uuid;
 
 pub struct ArgState {
     pub name: String,
@@ -36,17 +37,17 @@ pub enum ArgKind {
         allow_file: bool,
     },
     Choose {
-        value: String,
+        value: (String, Uuid),
         possible: Vec<String>,
     },
     MultipleChoose {
-        values: Vec<String>,
+        values: Vec<(String, Uuid)>,
         possible: Vec<String>,
     },
 }
 
 impl ArgState {
-    pub fn update(&mut self, ui: &mut Ui, id: &mut usize) {
+    pub fn update(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             let label = ui.label(&self.name.to_sentence_case());
 
@@ -185,8 +186,10 @@ impl ArgState {
                         })
                     });
                 }
-                ArgKind::Choose { value, possible } => {
-                    *id += 1;
+                ArgKind::Choose {
+                    value: (value, id),
+                    possible,
+                } => {
                     let required = self.required;
                     ComboBox::from_id_source(id)
                         .selected_text(value.clone())
@@ -205,9 +208,7 @@ impl ArgState {
                 } => {
                     ui.vertical(|ui| {
                         let mut remove_index = None;
-                        for (index, value) in values.iter_mut().enumerate() {
-                            *id += 1;
-                            let id = *id;
+                        for (index, (value, id)) in values.iter_mut().enumerate() {
                             ui.horizontal(|ui| {
                                 if ui.small_button("-").clicked() {
                                     remove_index = Some(index);
@@ -227,7 +228,7 @@ impl ArgState {
                         }
 
                         if ui.button("New value").clicked() {
-                            values.push(String::new());
+                            values.push((String::new(), Uuid::new_v4()));
                         }
                     });
                 }
@@ -297,7 +298,9 @@ impl ArgState {
                     cmd.arg(value);
                 }
             }
-            ArgKind::Choose { value, .. } => {
+            ArgKind::Choose {
+                value: (value, _), ..
+            } => {
                 match (&value[..], self.required) {
                     ("", true) => return Err(()),
                     ("", false) => {}
@@ -310,7 +313,7 @@ impl ArgState {
                 };
             }
             ArgKind::MultipleChoose { values, .. } => {
-                for value in values {
+                for (value, _) in values {
                     if let Some(call_name) = self.call_name.as_ref() {
                         cmd.arg(call_name);
                     }
@@ -393,11 +396,14 @@ impl From<&Arg<'_>> for ArgState {
             (true, false, _, None) => ArgKind::Occurences(0),
             (false, false, _, None) => ArgKind::Bool(false),
             (false, _, _, Some(possible)) => ArgKind::Choose {
-                value: if required {
-                    possible[0].to_string()
-                } else {
-                    "".into()
-                },
+                value: (
+                    if required {
+                        possible[0].to_string()
+                    } else {
+                        "".into()
+                    },
+                    Uuid::new_v4(),
+                ),
                 possible: possible.iter().map(|s| s.to_string()).collect(),
             },
             (true, _, _, Some(possible)) => ArgKind::MultipleChoose {
