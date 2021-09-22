@@ -299,7 +299,7 @@ impl ArgState {
         });
     }
 
-    pub fn cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
+    pub fn set_cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
         match &self.kind {
             ArgKind::String { value, default } => {
                 match (&value[..], default, self.optional) {

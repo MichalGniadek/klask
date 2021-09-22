@@ -62,14 +62,14 @@ impl AppState {
         }
     }
 
-    pub fn cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
+    pub fn set_cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
         for arg in &self.args {
-            cmd = arg.cmd_args(cmd)?;
+            cmd = arg.set_cmd_args(cmd)?;
         }
 
         if let Some(current) = &self.current {
             cmd.arg(current);
-            self.subcommands[current].cmd_args(cmd)
+            self.subcommands[current].set_cmd_args(cmd)
         } else if !self.subcommands.is_empty() {
             Err("Internal error.".to_string())
         } else {

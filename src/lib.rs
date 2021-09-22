@@ -26,7 +26,6 @@ pub struct ChildApp {
 }
 
 pub struct Klask {
-    name: String,
     child: Option<ChildApp>,
     output: Result<String, String>,
     state: AppState,
@@ -36,17 +35,14 @@ pub struct Klask {
     app: App<'static>,
 }
 
+// Public interface
 impl Klask {
     pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
-        match App::new("Outer GUI")
-            .subcommand(app.clone())
-            .try_get_matches()
-        {
+        match App::new("outer").subcommand(app.clone()).try_get_matches() {
             Ok(matches) => match matches.subcommand_matches(app.get_name()) {
                 Some(m) => f(m),
                 None => {
                     let klask = Self {
-                        name: app.get_name().to_string(),
                         child: None,
                         output: Ok(String::new()),
                         state: AppState::new(&app),
@@ -74,31 +70,33 @@ impl Klask {
             None => panic!("Internal error, C::from_arg_matches should always succeed"),
         });
     }
+}
 
+impl Klask {
     fn execute_command(&mut self) -> Result<String, String> {
         let mut cmd = Command::new(
             std::env::current_exe().map_err(|_| String::from("Couldn't get current exe"))?,
         );
-        cmd.arg(&self.name)
+        cmd.arg(self.app.get_name())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        match self.state.cmd_args(cmd) {
+        match self.state.set_cmd_args(cmd) {
             Ok(mut cmd) => {
                 self.validation_error = None;
 
-                if let Err(mut err) = self.app.clone().try_get_matches_from(cmd.get_args()) {
+                // Check for validation errors
+                if let Err(err) = self.app.clone().try_get_matches_from(cmd.get_args()) {
                     match err.kind {
                         clap::ErrorKind::ValueValidation => {
-                            let start =
-                                err.info[0].find('<').ok_or_else(|| "Internal error, '<'")?;
-                            let end = err.info[0].find('>').ok_or_else(|| "Internal error, '>'")?;
-                            let name = err.info[0][(start + 1)..end].to_sentence_case();
+                            let name = err.info[0]
+                                .split_once('<')
+                                .and_then(|(_, suffix)| suffix.split_once('>'))
+                                .map(|(prefix, _)| prefix.to_sentence_case())
+                                .ok_or_else(|| "internal error, no name")?;
 
-                            let ret =
-                                Err(format!("Validation error in {}: {:?}", name, err.info[2]));
-                            self.validation_error = Some((name, err.info.swap_remove(2)));
-                            return ret;
+                            self.validation_error = Some((name.to_string(), err.info[2].clone()));
+                            return Err(format!("Validation error in {}: {:?}", name, err.info[2]));
                         }
                         _ => return Err(format!("Match error: {:?}  {:?}", err.kind, err.info)),
                     }
@@ -162,57 +160,7 @@ impl Klask {
 
     fn update_output(&self, ui: &mut Ui) {
         match &self.output {
-            Ok(output) => {
-                let output = cansi::categorise_text(output);
-                for CategorisedSlice {
-                    text,
-                    fg_colour,
-                    bg_colour,
-                    intensity,
-                    italic,
-                    underline,
-                    strikethrough,
-                    ..
-                } in output
-                {
-                    for span in LinkFinder::new().spans(text) {
-                        match span.kind() {
-                            Some(LinkKind::Url) => ui.hyperlink(span.as_str()),
-                            Some(LinkKind::Email) => {
-                                ui.hyperlink(format!("mailto:{}", span.as_str()))
-                            }
-                            Some(_) | None => {
-                                let mut label =
-                                    Label::new(span.as_str()).text_color(convert_color(fg_colour));
-
-                                if bg_colour != Color::Black {
-                                    label = label.background_color(convert_color(bg_colour));
-                                }
-
-                                if italic {
-                                    label = label.italics();
-                                }
-
-                                if underline {
-                                    label = label.underline();
-                                }
-
-                                if strikethrough {
-                                    label = label.strikethrough();
-                                }
-
-                                label = match intensity {
-                                    cansi::Intensity::Normal => label,
-                                    cansi::Intensity::Bold => label.strong(),
-                                    cansi::Intensity::Faint => label.weak(),
-                                };
-
-                                ui.add(label)
-                            }
-                        };
-                    }
-                }
-            }
+            Ok(output) => ui.ansi_label(output),
             Err(output) => {
                 ui.colored_label(Color32::RED, output);
             }
@@ -263,7 +211,7 @@ impl Klask {
 
 impl epi::App for Klask {
     fn name(&self) -> &str {
-        &self.name
+        self.app.get_name()
     }
 
     fn update(&mut self, ctx: &eframe::egui::CtxRef, _frame: &mut epi::Frame<'_>) {
@@ -304,7 +252,7 @@ impl epi::App for Klask {
     }
 }
 
-fn convert_color(color: Color) -> Color32 {
+fn ansi_color_to_egui(color: Color) -> Color32 {
     match color {
         Color::Black => Color32::from_rgb(0, 0, 0),
         Color::Red => Color32::from_rgb(205, 49, 49),
@@ -326,16 +274,15 @@ fn convert_color(color: Color) -> Color32 {
 }
 
 trait MyUi {
-    fn error_style_if(&mut self, error: bool, f: impl FnOnce(&mut Ui));
+    fn error_style_if<F: FnOnce(&mut Ui) -> R, R>(&mut self, error: bool, f: F) -> R;
     fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response;
+    fn ansi_label(&mut self, text: &String);
 }
 
 impl MyUi for Ui {
-    fn error_style_if(&mut self, error: bool, f: impl FnOnce(&mut Ui)) {
-        let previous = if error {
+    fn error_style_if<F: FnOnce(&mut Ui) -> R, R>(&mut self, is_error: bool, f: F) -> R {
+        if is_error {
             let visuals = &mut self.style_mut().visuals;
-            let previous = visuals.clone();
-
             visuals.widgets.inactive.bg_stroke.color = Color32::RED;
             visuals.widgets.inactive.bg_stroke.width = 1.0;
             visuals.widgets.hovered.bg_stroke.color = Color32::RED;
@@ -343,20 +290,69 @@ impl MyUi for Ui {
             visuals.widgets.open.bg_stroke.color = Color32::RED;
             visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
             visuals.selection.stroke.color = Color32::RED;
-
-            Some(previous)
-        } else {
-            None
-        };
-
-        f(self);
-
-        if let Some(previous) = previous {
-            self.style_mut().visuals = previous;
         }
+
+        let ret = f(self);
+
+        if is_error {
+            self.reset_style();
+        }
+
+        ret
     }
 
     fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response {
         self.add(TextEdit::singleline(text).hint_text(hint))
+    }
+
+    fn ansi_label(&mut self, text: &String) {
+        let output = cansi::categorise_text(text);
+
+        for CategorisedSlice {
+            text,
+            fg_colour,
+            bg_colour,
+            intensity,
+            italic,
+            underline,
+            strikethrough,
+            ..
+        } in output
+        {
+            for span in LinkFinder::new().spans(text) {
+                match span.kind() {
+                    Some(LinkKind::Url) => self.hyperlink(span.as_str()),
+                    Some(LinkKind::Email) => self.hyperlink(format!("mailto:{}", span.as_str())),
+                    Some(_) | None => {
+                        let mut label =
+                            Label::new(span.as_str()).text_color(ansi_color_to_egui(fg_colour));
+
+                        if bg_colour != Color::Black {
+                            label = label.background_color(ansi_color_to_egui(bg_colour));
+                        }
+
+                        if italic {
+                            label = label.italics();
+                        }
+
+                        if underline {
+                            label = label.underline();
+                        }
+
+                        if strikethrough {
+                            label = label.strikethrough();
+                        }
+
+                        label = match intensity {
+                            cansi::Intensity::Normal => label,
+                            cansi::Intensity::Bold => label.strong(),
+                            cansi::Intensity::Faint => label.weak(),
+                        };
+
+                        self.add(label)
+                    }
+                };
+            }
+        }
     }
 }
