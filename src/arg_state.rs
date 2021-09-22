@@ -1,9 +1,9 @@
 use crate::MyUi;
 use clap::{Arg, ArgSettings, ValueHint};
-use eframe::egui::{ComboBox, TextEdit, Ui};
+use eframe::egui::{ComboBox, Ui};
 use inflector::Inflector;
 use native_dialog::FileDialog;
-use std::process::Command;
+use std::{ops::Not, process::Command};
 use uuid::Uuid;
 
 pub struct ArgState {
@@ -59,15 +59,14 @@ impl ArgState {
             match &mut self.kind {
                 ArgKind::String { value, default } => {
                     let required = self.required;
+
                     ui.error_style_if(self.required && value.is_empty(), |ui| {
-                        ui.add(
-                            TextEdit::singleline(value)
-                                .hint_text(default.clone().unwrap_or(if required {
-                                    String::new()
-                                } else {
-                                    String::from("(Optional)")
-                                }))
-                                .desired_width(f32::MAX),
+                        ui.text_edit_singleline_hint(
+                            value,
+                            default
+                                .clone()
+                                .or(required.not().then(|| String::from("(Optional)")))
+                                .unwrap_or_else(|| String::new()),
                         );
                     });
                 }
@@ -93,7 +92,7 @@ impl ArgState {
                                 if ui.small_button("-").clicked() {
                                     remove_index = Some(index);
                                 }
-                                ui.add(TextEdit::singleline(value).desired_width(f32::MAX));
+                                ui.text_edit_singleline(value);
                             });
                         }
 
@@ -139,7 +138,7 @@ impl ArgState {
                         }
                     }
 
-                    ui.add(TextEdit::singleline(value).desired_width(f32::MAX));
+                    ui.text_edit_singleline(value);
                 }
                 ArgKind::MultiplePaths {
                     values,
@@ -170,8 +169,7 @@ impl ArgState {
                                         *value = file.to_string_lossy().into_owned();
                                     }
                                 }
-
-                                ui.add(TextEdit::singleline(value).desired_width(f32::MAX));
+                                ui.text_edit_singleline(value);
                             });
                         }
 

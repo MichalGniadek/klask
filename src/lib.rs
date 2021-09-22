@@ -7,7 +7,7 @@ use app_state::AppState;
 use cansi::{CategorisedSlice, Color};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, Color32, Label, Ui},
+    egui::{self, Button, Color32, Label, Response, TextEdit, Ui},
     epi,
 };
 use linkify::{LinkFinder, LinkKind};
@@ -236,6 +236,7 @@ impl epi::App for Klask {
     fn update(&mut self, ctx: &eframe::egui::CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
+                ui.style_mut().spacing.text_edit_width = f32::MAX;
                 self.state.update(ui);
 
                 ui.horizontal(|ui| {
@@ -295,6 +296,7 @@ fn convert_color(color: Color) -> Color32 {
 
 trait MyUi {
     fn error_style_if(&mut self, error: bool, f: impl FnOnce(&mut Ui));
+    fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response;
 }
 
 impl MyUi for Ui {
@@ -321,5 +323,9 @@ impl MyUi for Ui {
         if let Some(previous) = previous {
             self.style_mut().visuals = previous;
         }
+    }
+
+    fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response {
+        self.add(TextEdit::singleline(text).hint_text(hint))
     }
 }
