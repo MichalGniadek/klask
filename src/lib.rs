@@ -66,7 +66,7 @@ impl Klask {
         });
     }
 
-    fn run_command(&mut self) -> Result<(), String> {
+    fn execute_command(&mut self) -> Result<(), String> {
         let mut cmd = Command::new(
             std::env::current_exe().map_err(|_| String::from("Couldn't get current exe"))?,
         );
@@ -186,6 +186,36 @@ impl Klask {
         }
     }
 
+    fn read_output_from_child(&mut self) {
+        if let Some((_, stdout, stderr)) = &mut self.child {
+            if let Some(receiver) = stdout {
+                for line in receiver.try_iter() {
+                    if let Some(line) = line {
+                        self.output.push_str(&line);
+                    } else {
+                        *stdout = None;
+                        break;
+                    }
+                }
+            }
+
+            if let Some(receiver) = stderr {
+                for line in receiver.try_iter() {
+                    if let Some(line) = line {
+                        self.output.push_str(&line);
+                    } else {
+                        *stderr = None;
+                        break;
+                    }
+                }
+            }
+
+            if let (None, None) = (stdout, stderr) {
+                self.kill_child()
+            }
+        }
+    }
+
     fn kill_child(&mut self) {
         if let Some((child, _, _)) = &mut self.child {
             let _ = child.kill();
@@ -209,7 +239,7 @@ impl epi::App for Klask {
                         .add(Button::new("Run!").enabled(self.child.is_none()))
                         .clicked()
                     {
-                        if let Err(err) = self.run_command() {
+                        if let Err(err) = self.execute_command() {
                             self.output = err;
                         }
                     }
@@ -219,42 +249,15 @@ impl epi::App for Klask {
                             self.kill_child();
                         }
 
-                        let mut running_test = String::from("Running");
+                        let mut running_text = String::from("Running");
                         for _ in 0..((2.0 * ui.input().time) as i32 % 4) {
-                            running_test.push('.')
+                            running_text.push('.')
                         }
-                        ui.label(running_test);
+                        ui.label(running_text);
                     }
                 });
 
-                if let Some((_, stdout, stderr)) = &mut self.child {
-                    if let Some(receiver) = stdout {
-                        for line in receiver.try_iter() {
-                            if let Some(line) = line {
-                                self.output.push_str(&line);
-                            } else {
-                                *stdout = None;
-                                break;
-                            }
-                        }
-                    }
-
-                    if let Some(receiver) = stderr {
-                        for line in receiver.try_iter() {
-                            if let Some(line) = line {
-                                self.output.push_str(&line);
-                            } else {
-                                *stderr = None;
-                                break;
-                            }
-                        }
-                    }
-
-                    if let (None, None) = (stdout, stderr) {
-                        self.kill_child()
-                    }
-                }
-
+                self.read_output_from_child();
                 self.update_output(ui);
             });
         });
