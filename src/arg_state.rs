@@ -1,5 +1,5 @@
 use clap::{Arg, ArgSettings, ValueHint};
-use eframe::egui::{TextEdit, Ui};
+use eframe::egui::{ComboBox, TextEdit, Ui};
 use native_dialog::FileDialog;
 use std::process::Command;
 
@@ -34,10 +34,18 @@ pub enum ArgKind {
         allow_dir: bool,
         allow_file: bool,
     },
+    Choose {
+        value: String,
+        possible: Vec<String>,
+    },
+    MultipleChoose {
+        values: Vec<String>,
+        possible: Vec<String>,
+    },
 }
 
 impl ArgState {
-    pub fn update(&mut self, ui: &mut Ui) {
+    pub fn update(&mut self, ui: &mut Ui, id: &mut usize) {
         ui.horizontal(|ui| {
             let label = ui.label(&self.name);
 
@@ -176,6 +184,52 @@ impl ArgState {
                         })
                     });
                 }
+                ArgKind::Choose { value, possible } => {
+                    *id += 1;
+                    let required = self.required;
+                    ComboBox::from_id_source(id)
+                        .selected_text(value.clone())
+                        .show_ui(ui, |ui| {
+                            if !required {
+                                ui.selectable_value(value, String::new(), "None");
+                            }
+                            for p in possible {
+                                ui.selectable_value(value, p.clone(), p);
+                            }
+                        });
+                }
+                ArgKind::MultipleChoose {
+                    values,
+                    ref possible,
+                } => {
+                    ui.vertical(|ui| {
+                        let mut remove_index = None;
+                        for (index, value) in values.iter_mut().enumerate() {
+                            *id += 1;
+                            let id = *id;
+                            ui.horizontal(|ui| {
+                                if ui.small_button("-").clicked() {
+                                    remove_index = Some(index);
+                                }
+                                ComboBox::from_id_source(id)
+                                    .selected_text(value.clone())
+                                    .show_ui(ui, |ui| {
+                                        for p in possible {
+                                            ui.selectable_value(value, p.clone(), p);
+                                        }
+                                    });
+                            });
+                        }
+
+                        if let Some(index) = remove_index {
+                            values.remove(index);
+                        }
+
+                        if ui.button("New value").clicked() {
+                            values.push(String::new());
+                        }
+                    });
+                }
             };
         });
     }
@@ -242,6 +296,26 @@ impl ArgState {
                     cmd.arg(value);
                 }
             }
+            ArgKind::Choose { value, .. } => {
+                match (&value[..], self.required) {
+                    ("", true) => return Err(()),
+                    ("", false) => {}
+                    (value, _) => {
+                        if let Some(call_name) = self.call_name.as_ref() {
+                            cmd.arg(call_name);
+                        }
+                        cmd.arg(value);
+                    }
+                };
+            }
+            ArgKind::MultipleChoose { values, .. } => {
+                for value in values {
+                    if let Some(call_name) = self.call_name.as_ref() {
+                        cmd.arg(call_name);
+                    }
+                    cmd.arg(value);
+                }
+            }
         }
 
         Ok(cmd)
@@ -260,13 +334,16 @@ impl From<&Arg<'_>> for ArgState {
             .map(ToString::to_string)
             .or_else(|| a.get_about().map(ToString::to_string));
 
+        let required = a.is_set(ArgSettings::Required);
+
         use ValueHint::*;
         let kind = match (
             a.is_set(ArgSettings::MultipleOccurrences),
             a.is_set(ArgSettings::TakesValue),
             a.get_value_hint(),
+            a.get_possible_values(),
         ) {
-            (true, true, AnyPath | DirPath | FilePath | ExecutablePath) => {
+            (true, true, AnyPath | DirPath | FilePath | ExecutablePath, None) => {
                 let default: Vec<_> = a
                     .get_default_values()
                     .iter()
@@ -280,7 +357,7 @@ impl From<&Arg<'_>> for ArgState {
                     allow_file: matches!(a.get_value_hint(), AnyPath | FilePath | ExecutablePath),
                 }
             }
-            (true, true, _) => {
+            (true, true, _, None) => {
                 let default: Vec<_> = a
                     .get_default_values()
                     .iter()
@@ -292,7 +369,7 @@ impl From<&Arg<'_>> for ArgState {
                     default,
                 }
             }
-            (false, true, AnyPath | DirPath | FilePath | ExecutablePath) => {
+            (false, true, AnyPath | DirPath | FilePath | ExecutablePath, None) => {
                 let default = a
                     .get_default_values()
                     .first()
@@ -305,22 +382,34 @@ impl From<&Arg<'_>> for ArgState {
                     allow_file: matches!(a.get_value_hint(), AnyPath | FilePath | ExecutablePath),
                 }
             }
-            (false, true, _) => ArgKind::String {
+            (false, true, _, None) => ArgKind::String {
                 value: "".into(),
                 default: a
                     .get_default_values()
                     .first()
                     .map(|s| s.to_string_lossy().into_owned()),
             },
-            (true, false, _) => ArgKind::Occurences(0),
-            (false, false, _) => ArgKind::Bool(false),
+            (true, false, _, None) => ArgKind::Occurences(0),
+            (false, false, _, None) => ArgKind::Bool(false),
+            (false, _, _, Some(possible)) => ArgKind::Choose {
+                value: if required {
+                    possible[0].to_string()
+                } else {
+                    "".into()
+                },
+                possible: possible.iter().map(|s| s.to_string()).collect(),
+            },
+            (true, _, _, Some(possible)) => ArgKind::MultipleChoose {
+                values: vec![],
+                possible: possible.iter().map(|s| s.to_string()).collect(),
+            },
         };
 
         Self {
             name: a.get_name().to_string(),
             call_name,
             desc,
-            required: a.is_set(ArgSettings::Required),
+            required,
             kind,
         }
     }

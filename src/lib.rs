@@ -179,7 +179,8 @@ impl epi::App for Klask {
     fn update(&mut self, ctx: &eframe::egui::CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-                self.state.update(ui);
+                let mut id = 0;
+                self.state.update(ui, &mut id);
 
                 ui.horizontal(|ui| {
                     if ui
