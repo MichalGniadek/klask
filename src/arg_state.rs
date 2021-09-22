@@ -1,4 +1,4 @@
-use crate::{MyUi, ValidationErrorInfo, ValidationErrorInfoTrait};
+use crate::{error::ValidationErrorInfoTrait, KlaskUi, ValidationErrorInfo};
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, Ui};
 use inflector::Inflector;
