@@ -328,17 +328,23 @@ impl ArgState {
 
 impl From<&Arg<'_>> for ArgState {
     fn from(a: &Arg) -> Self {
-        let call_name = a
+        let mut call_name = a
             .get_long()
             .map(|s| format!("--{}", s))
             .or_else(|| a.get_short().map(|c| format!("-{}", c)));
+
+        if a.is_set(ArgSettings::RequireEquals) {
+            if let Some(call_name) = &mut call_name {
+                call_name.push('=');
+            }
+        }
 
         let desc = a
             .get_long_about()
             .map(ToString::to_string)
             .or_else(|| a.get_about().map(ToString::to_string));
 
-        let required = a.is_set(ArgSettings::Required);
+        let required = a.is_set(ArgSettings::Required) | a.is_set(ArgSettings::ForbidEmptyValues);
 
         use ValueHint::*;
         let kind = match (

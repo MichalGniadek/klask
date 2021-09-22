@@ -1,4 +1,4 @@
-#![feature(command_access)] // only for debugging
+#![feature(command_access)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 mod app_state;
 mod arg_state;
@@ -27,10 +27,13 @@ pub struct Klask {
     )>,
     output: String,
     state: AppState,
+    // This isn't a generic lifetime because eframe::run_native() requires
+    // a 'static lifetime because boxed trait objects default to 'static
+    app: App<'static>,
 }
 
 impl Klask {
-    pub fn run_app(app: App, f: impl FnOnce(&ArgMatches)) {
+    pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
         match App::new("Outer GUI")
             .subcommand(app.clone())
             .try_get_matches()
@@ -43,6 +46,7 @@ impl Klask {
                         child: None,
                         output: String::new(),
                         state: AppState::new(&app),
+                        app,
                     };
                     let native_options = eframe::NativeOptions::default();
                     eframe::run_native(Box::new(klask), native_options);
@@ -76,8 +80,10 @@ impl Klask {
 
         match self.state.cmd_args(cmd) {
             Ok(mut cmd) => {
-                // let args: Vec<_> = cmd.get_args().collect();
-                // println!("{:?}", args);
+                if let Err(err) = self.app.clone().try_get_matches_from(cmd.get_args()) {
+                    return Err(format!("Match error: {:?}  {:?}", err.kind, err.info));
+                }
+
                 self.output = String::new();
 
                 let mut child = cmd
@@ -90,14 +96,6 @@ impl Klask {
                         .take()
                         .ok_or_else(|| String::from("Couldn't take stdout"))?,
                 );
-
-                let mut stderr_reader = BufReader::new(
-                    child
-                        .stderr
-                        .take()
-                        .ok_or_else(|| String::from("Couldn't take stderr"))?,
-                );
-
                 let (stdout_tx, stdout_rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
@@ -112,6 +110,12 @@ impl Klask {
                     }
                 });
 
+                let mut stderr_reader = BufReader::new(
+                    child
+                        .stderr
+                        .take()
+                        .ok_or_else(|| String::from("Couldn't take stderr"))?,
+                );
                 let (stderr_tx, stderr_rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
