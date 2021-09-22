@@ -1,4 +1,4 @@
-use crate::arg_state::ArgState;
+use crate::{arg_state::ArgState, ValidationErrorInfo};
 use clap::App;
 use eframe::egui::Ui;
 use inflector::Inflector;
@@ -35,7 +35,7 @@ impl AppState {
         }
     }
 
-    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<(String, String)>) {
+    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
         if let Some(ref about) = self.about {
             ui.label(about);
         }

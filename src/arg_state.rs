@@ -1,4 +1,4 @@
-use crate::MyUi;
+use crate::{MyUi, ValidationErrorInfo};
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, Ui};
 use inflector::Inflector;
@@ -48,11 +48,11 @@ pub enum ArgKind {
 }
 
 impl ArgState {
-    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<(String, String)>) {
+    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
         ui.horizontal(|ui| {
             let is_validation_error = validation_error
                 .as_ref()
-                .map_or(false, |(name, _)| name == &self.name);
+                .map_or(false, |ValidationErrorInfo { name, .. }| name == &self.name);
 
             let label = ui.label(&self.name);
 
@@ -75,7 +75,7 @@ impl ArgState {
 
                             if is_validation_error {
                                 if text
-                                    .on_hover_text(&validation_error.as_ref().unwrap().1)
+                                    .on_hover_text(&validation_error.as_ref().unwrap().message)
                                     .changed()
                                 {
                                     *validation_error = None;
@@ -102,7 +102,7 @@ impl ArgState {
                     if is_validation_error {
                         if list
                             .response
-                            .on_hover_text(&validation_error.as_ref().unwrap().1)
+                            .on_hover_text(&validation_error.as_ref().unwrap().message)
                             .changed()
                         {
                             *validation_error = None;
@@ -144,7 +144,7 @@ impl ArgState {
                     if is_validation_error {
                         if list
                             .response
-                            .on_hover_text(&validation_error.as_ref().unwrap().1)
+                            .on_hover_text(&validation_error.as_ref().unwrap().message)
                             .changed()
                         {
                             *validation_error = None;
@@ -182,7 +182,7 @@ impl ArgState {
                         let text = ui.text_edit_singleline(value);
                         if is_validation_error {
                             if text
-                                .on_hover_text(&validation_error.as_ref().unwrap().1)
+                                .on_hover_text(&validation_error.as_ref().unwrap().message)
                                 .changed()
                             {
                                 *validation_error = None;
@@ -243,7 +243,7 @@ impl ArgState {
                     if is_validation_error {
                         if list
                             .response
-                            .on_hover_text(&validation_error.as_ref().unwrap().1)
+                            .on_hover_text(&validation_error.as_ref().unwrap().message)
                             .changed()
                         {
                             *validation_error = None;

@@ -25,11 +25,55 @@ pub struct ChildApp {
     stderr: Option<Receiver<Option<String>>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ValidationErrorInfo {
+    name: String,
+    message: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum OutputError {
+    #[error("Internal io error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Internal error: no name in validation")]
+    NoValidationName,
+    #[error("Internal match error:")]
+    MatchError(clap::Error),
+    #[error("Internal error: no child stdout or stderr")]
+    NoStdoutOrStderr,
+    #[error("Validation error in {}: '{}'", .0.name, .0.message)]
+    ValidationError(ValidationErrorInfo),
+    #[error("{0}")]
+    GuiError(String),
+}
+
+impl From<clap::Error> for OutputError {
+    fn from(err: clap::Error) -> Self {
+        match err.kind {
+            clap::ErrorKind::ValueValidation => {
+                if let Some(name) = err.info[0]
+                    .split_once('<')
+                    .and_then(|(_, suffix)| suffix.split_once('>'))
+                    .map(|(prefix, _)| prefix.to_sentence_case())
+                {
+                    OutputError::ValidationError(ValidationErrorInfo {
+                        name,
+                        message: err.info[2].clone(),
+                    })
+                } else {
+                    OutputError::NoValidationName
+                }
+            }
+            _ => OutputError::MatchError(err),
+        }
+    }
+}
+
 pub struct Klask {
     child: Option<ChildApp>,
-    output: Result<String, String>,
+    output: Result<String, OutputError>,
     state: AppState,
-    validation_error: Option<(String, String)>,
+    validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
     app: App<'static>,
@@ -73,45 +117,21 @@ impl Klask {
 }
 
 impl Klask {
-    fn execute_command(&mut self) -> Result<String, String> {
-        let mut cmd = Command::new(
-            std::env::current_exe().map_err(|_| String::from("Couldn't get current exe"))?,
-        );
+    fn execute_command(&mut self) -> Result<String, OutputError> {
+        let mut cmd = Command::new(std::env::current_exe()?);
         cmd.arg(self.app.get_name())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
         match self.state.set_cmd_args(cmd) {
             Ok(mut cmd) => {
-                self.validation_error = None;
-
                 // Check for validation errors
-                if let Err(err) = self.app.clone().try_get_matches_from(cmd.get_args()) {
-                    match err.kind {
-                        clap::ErrorKind::ValueValidation => {
-                            let name = err.info[0]
-                                .split_once('<')
-                                .and_then(|(_, suffix)| suffix.split_once('>'))
-                                .map(|(prefix, _)| prefix.to_sentence_case())
-                                .ok_or_else(|| "internal error, no name")?;
+                self.app.clone().try_get_matches_from(cmd.get_args())?;
 
-                            self.validation_error = Some((name.to_string(), err.info[2].clone()));
-                            return Err(format!("Validation error in {}: {:?}", name, err.info[2]));
-                        }
-                        _ => return Err(format!("Match error: {:?}  {:?}", err.kind, err.info)),
-                    }
-                }
+                let mut child = cmd.spawn()?;
 
-                let mut child = cmd
-                    .spawn()
-                    .map_err(|_| String::from("Couldn't spawn a child"))?;
-
-                let mut stdout_reader = BufReader::new(
-                    child
-                        .stdout
-                        .take()
-                        .ok_or_else(|| String::from("Couldn't take stdout"))?,
-                );
+                let mut stdout_reader =
+                    BufReader::new(child.stdout.take().ok_or(OutputError::NoStdoutOrStderr)?);
                 let (stdout_tx, stdout_rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
@@ -126,12 +146,8 @@ impl Klask {
                     }
                 });
 
-                let mut stderr_reader = BufReader::new(
-                    child
-                        .stderr
-                        .take()
-                        .ok_or_else(|| String::from("Couldn't take stderr"))?,
-                );
+                let mut stderr_reader =
+                    BufReader::new(child.stderr.take().ok_or(OutputError::NoStdoutOrStderr)?);
                 let (stderr_tx, stderr_rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
@@ -154,7 +170,7 @@ impl Klask {
 
                 Ok(String::new())
             }
-            Err(err) => Err(err),
+            Err(err) => Err(OutputError::GuiError(err)),
         }
     }
 
@@ -162,7 +178,7 @@ impl Klask {
         match &self.output {
             Ok(output) => ui.ansi_label(output),
             Err(output) => {
-                ui.colored_label(Color32::RED, output);
+                ui.colored_label(Color32::RED, output.to_string());
             }
         }
     }
@@ -226,6 +242,12 @@ impl epi::App for Klask {
                         .clicked()
                     {
                         self.output = self.execute_command();
+                        self.validation_error =
+                            if let Err(OutputError::ValidationError(info)) = &self.output {
+                                Some(info.clone())
+                            } else {
+                                None
+                            };
                     }
 
                     if self.child.is_some() {
