@@ -5,6 +5,7 @@ authors = ["Michal Gniadek <mgniadek@interia.pl>"]
 edition = "2018"
 
 [dependencies]
+Inflector = "0.11.4"
 cansi = "2.1.1"
 clap = "3.0.0-beta.4"
 eframe = "0.14.0"

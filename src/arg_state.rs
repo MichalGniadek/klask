@@ -1,5 +1,6 @@
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, TextEdit, Ui};
+use inflector::Inflector;
 use native_dialog::FileDialog;
 use std::process::Command;
 
@@ -47,7 +48,7 @@ pub enum ArgKind {
 impl ArgState {
     pub fn update(&mut self, ui: &mut Ui, id: &mut usize) {
         ui.horizontal(|ui| {
-            let label = ui.label(&self.name);
+            let label = ui.label(&self.name.to_sentence_case());
 
             if let Some(desc) = &self.desc {
                 label.on_hover_text(desc);

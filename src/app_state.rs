@@ -1,6 +1,7 @@
 use crate::arg_state::ArgState;
 use clap::App;
 use eframe::egui::Ui;
+use inflector::Inflector;
 use std::{collections::HashMap, process::Command};
 
 pub struct AppState {
@@ -42,7 +43,11 @@ impl AppState {
 
         ui.horizontal(|ui| {
             for name in self.subcommands.keys() {
-                ui.selectable_value(&mut self.current, Some(name.clone()), name);
+                ui.selectable_value(
+                    &mut self.current,
+                    Some(name.clone()),
+                    name.to_sentence_case(),
+                );
             }
         });
 

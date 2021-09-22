@@ -48,7 +48,7 @@ pub struct Run {
 #[derive(Debug, Clap)]
 pub struct Walk {
     /// Example2
-    #[clap(multiple_occurrences(true))]
+    #[clap(short, multiple_occurrences(true))]
     mult: Vec<String>,
 }
 

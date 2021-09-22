@@ -95,16 +95,28 @@ impl Klask {
                 );
 
                 let (tx, rx) = mpsc::channel();
+
+                let stdout_tx = tx.clone();
                 thread::spawn(move || loop {
                     let mut output = String::new();
-                    if let (Ok(0), Ok(0)) = (
-                        stdout_reader.read_line(&mut output),
-                        stderr_reader.read_line(&mut output),
-                    ) {
+                    if let Ok(0) = stdout_reader.read_line(&mut output) {
                         // End of output
                         break;
                     }
-                    if tx.send(output).is_err() {
+                    if stdout_tx.send(output).is_err() {
+                        // Send returns error only if data will never be received
+                        break;
+                    }
+                });
+
+                let stderr_tx = tx;
+                thread::spawn(move || loop {
+                    let mut output = String::new();
+                    if let Ok(0) = stderr_reader.read_line(&mut output) {
+                        // End of output
+                        break;
+                    }
+                    if stderr_tx.send(output).is_err() {
                         // Send returns error only if data will never be received
                         break;
                     }
