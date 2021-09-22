@@ -1,4 +1,5 @@
 #![feature(command_access)] // only for debugging
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 mod app_state;
 mod arg_state;
 
@@ -29,20 +30,24 @@ impl Klask {
         match App::new("Outer GUI")
             .subcommand(app.clone())
             .try_get_matches()
-            .expect("Arguments should've been verified by the GUI app")
-            .subcommand_matches(app.get_name())
         {
-            Some(m) => f(m),
-            None => {
-                let klask = Self {
-                    name: app.get_name().to_string(),
-                    child: None,
-                    output: String::new(),
-                    state: AppState::new(&app),
-                };
-                let native_options = eframe::NativeOptions::default();
-                eframe::run_native(Box::new(klask), native_options);
-            }
+            Ok(matches) => match matches.subcommand_matches(app.get_name()) {
+                Some(m) => f(m),
+                None => {
+                    let klask = Self {
+                        name: app.get_name().to_string(),
+                        child: None,
+                        output: String::new(),
+                        state: AppState::new(&app),
+                    };
+                    let native_options = eframe::NativeOptions::default();
+                    eframe::run_native(Box::new(klask), native_options);
+                }
+            },
+            Err(err) => panic!(
+                "Internal error, arguments should've been verified by the GUI app {:#?}",
+                err
+            ),
         }
     }
 
@@ -51,28 +56,45 @@ impl Klask {
         C: IntoApp + FromArgMatches,
         F: FnOnce(C),
     {
-        Self::run_app(C::into_app(), |m| f(C::from_arg_matches(m).unwrap()));
+        Self::run_app(C::into_app(), |m| match C::from_arg_matches(m) {
+            Some(c) => f(c),
+            None => panic!("Internal error, C::from_arg_matches should always succeed"),
+        });
     }
 
-    fn run_command(&mut self) {
-        let mut cmd = Command::new(std::env::current_exe().unwrap());
+    fn run_command(&mut self) -> Result<(), String> {
+        let mut cmd = Command::new(
+            std::env::current_exe().map_err(|_| String::from("Couldn't get current exe"))?,
+        );
         cmd.stdout(Stdio::piped()).arg(&self.name);
+
         match self.state.cmd_args(cmd) {
             Ok(mut cmd) => {
                 // let args: Vec<_> = cmd.get_args().collect();
                 // println!("{:?}", args);
                 self.output = String::new();
 
-                let mut child = cmd.spawn().unwrap();
-                let mut reader = BufReader::new(child.stdout.take().unwrap());
+                let mut child = cmd
+                    .spawn()
+                    .map_err(|_| String::from("Couldn't spawn a child"))?;
+
+                let mut reader = BufReader::new(
+                    child
+                        .stdout
+                        .take()
+                        .ok_or_else(|| String::from("Couldn't take stdout"))?,
+                );
 
                 let (tx, rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
                     if let Ok(0) = reader.read_line(&mut output) {
+                        // End of stdout
                         break;
-                    } else {
-                        tx.send(output).unwrap();
+                    }
+                    if tx.send(output).is_err() {
+                        // Send returns error only if data will never be received
+                        break;
                     }
                 });
 
@@ -82,6 +104,8 @@ impl Klask {
                 self.output = String::from("Incorrect");
             }
         }
+
+        Ok(())
     }
 
     fn update_output(&self, ui: &mut Ui) {
@@ -150,7 +174,9 @@ impl epi::App for Klask {
                         .add(Button::new("Run!").enabled(self.child.is_none()))
                         .clicked()
                     {
-                        self.run_command();
+                        if let Err(err) = self.run_command() {
+                            self.output = err;
+                        }
                     }
 
                     if let Some((child, _)) = &mut self.child {

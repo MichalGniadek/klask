@@ -105,22 +105,16 @@ impl ArgState {
                     allow_file,
                 } => {
                     if *allow_file && ui.button("Select file...").clicked() {
-                        if let Some(file) = FileDialog::new()
-                            .show_open_single_file()
-                            .unwrap()
-                            .map(|p| p.to_str().unwrap().to_string())
+                        if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
                         {
-                            *value = file;
+                            *value = file.to_string_lossy().into_owned();
                         }
                     }
 
                     if *allow_dir && ui.button("Select directory...").clicked() {
-                        if let Some(file) = FileDialog::new()
-                            .show_open_single_dir()
-                            .unwrap()
-                            .map(|p| p.to_str().unwrap().to_string())
+                        if let Some(file) = FileDialog::new().show_open_single_dir().ok().flatten()
                         {
-                            *value = file;
+                            *value = file.to_string_lossy().into_owned();
                         }
                     }
 
@@ -148,22 +142,18 @@ impl ArgState {
                                 }
 
                                 if *allow_file && ui.button("Select file...").clicked() {
-                                    if let Some(file) = FileDialog::new()
-                                        .show_open_single_file()
-                                        .unwrap()
-                                        .map(|p| p.to_str().unwrap().to_string())
+                                    if let Some(file) =
+                                        FileDialog::new().show_open_single_file().ok().flatten()
                                     {
-                                        *value = file;
+                                        *value = file.to_string_lossy().into_owned();
                                     }
                                 }
 
                                 if *allow_dir && ui.button("Select directory...").clicked() {
-                                    if let Some(file) = FileDialog::new()
-                                        .show_open_single_dir()
-                                        .unwrap()
-                                        .map(|p| p.to_str().unwrap().to_string())
+                                    if let Some(file) =
+                                        FileDialog::new().show_open_single_dir().ok().flatten()
                                     {
-                                        *value = file;
+                                        *value = file.to_string_lossy().into_owned();
                                     }
                                 }
 
@@ -212,12 +202,12 @@ impl ArgState {
             }
             &ArgKind::Occurences(i) => {
                 for _ in 0..i {
-                    cmd.arg(self.call_name.as_ref().unwrap());
+                    cmd.arg(self.call_name.as_ref().ok_or(())?);
                 }
             }
             &ArgKind::Bool(bool) => {
                 if bool {
-                    cmd.arg(self.call_name.as_ref().unwrap());
+                    cmd.arg(self.call_name.as_ref().ok_or(())?);
                 }
             }
             ArgKind::MultipleStrings { values, .. } => {
@@ -263,15 +253,12 @@ impl From<&Arg<'_>> for ArgState {
         let call_name = a
             .get_long()
             .map(|s| format!("--{}", s))
-            .or(a.get_short().map(|c| format!("-{}", c)));
+            .or_else(|| a.get_short().map(|c| format!("-{}", c)));
 
-        let desc = if let Some(about) = a.get_long_about() {
-            Some(about.to_string())
-        } else if let Some(about) = a.get_about() {
-            Some(about.to_string())
-        } else {
-            None
-        };
+        let desc = a
+            .get_long_about()
+            .map(ToString::to_string)
+            .or_else(|| a.get_about().map(ToString::to_string));
 
         use ValueHint::*;
         let kind = match (
@@ -312,7 +299,7 @@ impl From<&Arg<'_>> for ArgState {
                     .map(|s| s.to_string_lossy().into_owned());
 
                 ArgKind::Path {
-                    value: default.clone().unwrap_or(String::new()),
+                    value: default.clone().unwrap_or_default(),
                     default,
                     allow_dir: matches!(a.get_value_hint(), AnyPath | DirPath),
                     allow_file: matches!(a.get_value_hint(), AnyPath | FilePath | ExecutablePath),

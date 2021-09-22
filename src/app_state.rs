@@ -41,7 +41,7 @@ impl AppState {
         }
 
         ui.horizontal(|ui| {
-            for (name, _) in &self.subcommands {
+            for name in self.subcommands.keys() {
                 ui.selectable_value(&mut self.current, Some(name.clone()), name);
             }
         });
@@ -59,7 +59,7 @@ impl AppState {
         if let Some(current) = &self.current {
             cmd.arg(current);
             self.subcommands[current].cmd_args(cmd)
-        } else if self.subcommands.len() > 0 {
+        } else if !self.subcommands.is_empty() {
             Err(())
         } else {
             Ok(cmd)
