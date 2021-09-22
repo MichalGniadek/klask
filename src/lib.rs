@@ -13,7 +13,7 @@ use eframe::{
 use inflector::Inflector;
 use linkify::{LinkFinder, LinkKind};
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver},
     thread,
@@ -25,14 +25,99 @@ pub struct ChildApp {
     stderr: Option<Receiver<Option<String>>>,
 }
 
+impl ChildApp {
+    pub fn run(cmd: &mut Command) -> Result<Self, ExecuteError> {
+        let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+
+        let stdout =
+            Self::spawn_thread_reader(child.stdout.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
+        let stderr =
+            Self::spawn_thread_reader(child.stderr.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
+
+        Ok(ChildApp {
+            child,
+            stdout: Some(stdout),
+            stderr: Some(stderr),
+        })
+    }
+
+    pub fn read(&mut self, output: &mut String) -> bool {
+        if let Some(receiver) = &mut self.stdout {
+            for line in receiver.try_iter() {
+                if let Some(line) = line {
+                    output.push_str(&line);
+                } else {
+                    self.stdout = None;
+                    break;
+                }
+            }
+        }
+
+        if let Some(receiver) = &mut self.stderr {
+            for line in receiver.try_iter() {
+                if let Some(line) = line {
+                    output.push_str(&line);
+                } else {
+                    self.stderr = None;
+                    break;
+                }
+            }
+        }
+
+        self.stdout.is_none() && self.stderr.is_none()
+    }
+
+    pub fn kill(&mut self) {
+        let _ = self.child.kill();
+    }
+
+    fn spawn_thread_reader<R: Read + Send + Sync + 'static>(stdio: R) -> Receiver<Option<String>> {
+        let mut reader = BufReader::new(stdio);
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || loop {
+            let mut output = String::new();
+            if let Ok(0) = reader.read_line(&mut output) {
+                // End of output
+                let _ = tx.send(None);
+                break;
+            }
+            // Send returns error only if data will never be received
+            if tx.send(Some(output)).is_err() {
+                break;
+            }
+        });
+        rx
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ValidationErrorInfo {
     name: String,
     message: String,
 }
 
+pub trait ValidationErrorInfoTrait {
+    fn is<'a>(&'a self, name: &str) -> Option<&'a String>;
+}
+
+impl ValidationErrorInfoTrait for Option<ValidationErrorInfo> {
+    fn is<'a>(&'a self, name: &str) -> Option<&'a String> {
+        self.as_ref()
+            .map(
+                |ValidationErrorInfo { name: n, message }| {
+                    if n == name {
+                        Some(message)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .flatten()
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
-pub enum OutputError {
+pub enum ExecuteError {
     #[error("Internal io error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Internal error: no name in validation")]
@@ -47,7 +132,7 @@ pub enum OutputError {
     GuiError(String),
 }
 
-impl From<clap::Error> for OutputError {
+impl From<clap::Error> for ExecuteError {
     fn from(err: clap::Error) -> Self {
         match err.kind {
             clap::ErrorKind::ValueValidation => {
@@ -56,22 +141,22 @@ impl From<clap::Error> for OutputError {
                     .and_then(|(_, suffix)| suffix.split_once('>'))
                     .map(|(prefix, _)| prefix.to_sentence_case())
                 {
-                    OutputError::ValidationError(ValidationErrorInfo {
+                    ExecuteError::ValidationError(ValidationErrorInfo {
                         name,
                         message: err.info[2].clone(),
                     })
                 } else {
-                    OutputError::NoValidationName
+                    ExecuteError::NoValidationName
                 }
             }
-            _ => OutputError::MatchError(err),
+            _ => ExecuteError::MatchError(err),
         }
     }
 }
 
 pub struct Klask {
     child: Option<ChildApp>,
-    output: Result<String, OutputError>,
+    output: Result<String, ExecuteError>,
     state: AppState,
     validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
@@ -117,60 +202,18 @@ impl Klask {
 }
 
 impl Klask {
-    fn execute_command(&mut self) -> Result<String, OutputError> {
+    fn execute_command(&mut self) -> Result<(), ExecuteError> {
         let mut cmd = Command::new(std::env::current_exe()?);
-        cmd.arg(self.app.get_name())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        cmd.arg(self.app.get_name());
 
         match self.state.set_cmd_args(cmd) {
             Ok(mut cmd) => {
                 // Check for validation errors
                 self.app.clone().try_get_matches_from(cmd.get_args())?;
-
-                let mut child = cmd.spawn()?;
-
-                let mut stdout_reader =
-                    BufReader::new(child.stdout.take().ok_or(OutputError::NoStdoutOrStderr)?);
-                let (stdout_tx, stdout_rx) = mpsc::channel();
-                thread::spawn(move || loop {
-                    let mut output = String::new();
-                    if let Ok(0) = stdout_reader.read_line(&mut output) {
-                        // End of output
-                        let _ = stdout_tx.send(None);
-                        break;
-                    }
-                    if stdout_tx.send(Some(output)).is_err() {
-                        // Send returns error only if data will never be received
-                        break;
-                    }
-                });
-
-                let mut stderr_reader =
-                    BufReader::new(child.stderr.take().ok_or(OutputError::NoStdoutOrStderr)?);
-                let (stderr_tx, stderr_rx) = mpsc::channel();
-                thread::spawn(move || loop {
-                    let mut output = String::new();
-                    if let Ok(0) = stderr_reader.read_line(&mut output) {
-                        // End of output
-                        let _ = stderr_tx.send(None);
-                        break;
-                    }
-                    if stderr_tx.send(Some(output)).is_err() {
-                        // Send returns error only if data will never be received
-                        break;
-                    }
-                });
-
-                self.child = Some(ChildApp {
-                    child,
-                    stdout: Some(stdout_rx),
-                    stderr: Some(stderr_rx),
-                });
-
-                Ok(String::new())
+                self.child = Some(ChildApp::run(&mut cmd)?);
+                Ok(())
             }
-            Err(err) => Err(OutputError::GuiError(err)),
+            Err(err) => Err(ExecuteError::GuiError(err)),
         }
     }
 
@@ -184,42 +227,16 @@ impl Klask {
     }
 
     fn read_output_from_child(&mut self) {
-        if let Some(child) = &mut self.child {
-            if let Some(receiver) = &mut child.stdout {
-                for line in receiver.try_iter() {
-                    if let Some(line) = line {
-                        if let Ok(output) = &mut self.output {
-                            output.push_str(&line);
-                        }
-                    } else {
-                        child.stdout = None;
-                        break;
-                    }
-                }
-            }
-
-            if let Some(receiver) = &mut child.stderr {
-                for line in receiver.try_iter() {
-                    if let Some(line) = line {
-                        if let Ok(output) = &mut self.output {
-                            output.push_str(&line);
-                        }
-                    } else {
-                        child.stderr = None;
-                        break;
-                    }
-                }
-            }
-
-            if child.stdout.is_none() && child.stderr.is_none() {
-                self.kill_child()
+        if let (Some(child), Ok(output)) = (&mut self.child, &mut self.output) {
+            if child.read(output) {
+                self.kill_child();
             }
         }
     }
 
     fn kill_child(&mut self) {
         if let Some(child) = &mut self.child {
-            let _ = child.child.kill();
+            child.kill();
             self.child = None;
         }
     }
@@ -241,9 +258,9 @@ impl epi::App for Klask {
                         .add(Button::new("Run!").enabled(self.child.is_none()))
                         .clicked()
                     {
-                        self.output = self.execute_command();
+                        self.output = self.execute_command().map(|()| String::new());
                         self.validation_error =
-                            if let Err(OutputError::ValidationError(info)) = &self.output {
+                            if let Err(ExecuteError::ValidationError(info)) = &self.output {
                                 Some(info.clone())
                             } else {
                                 None
@@ -298,7 +315,7 @@ fn ansi_color_to_egui(color: Color) -> Color32 {
 trait MyUi {
     fn error_style_if<F: FnOnce(&mut Ui) -> R, R>(&mut self, error: bool, f: F) -> R;
     fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response;
-    fn ansi_label(&mut self, text: &String);
+    fn ansi_label(&mut self, text: &str);
 }
 
 impl MyUi for Ui {
@@ -327,7 +344,7 @@ impl MyUi for Ui {
         self.add(TextEdit::singleline(text).hint_text(hint))
     }
 
-    fn ansi_label(&mut self, text: &String) {
+    fn ansi_label(&mut self, text: &str) {
         let output = cansi::categorise_text(text);
 
         for CategorisedSlice {

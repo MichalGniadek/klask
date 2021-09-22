@@ -1,4 +1,4 @@
-use crate::{MyUi, ValidationErrorInfo};
+use crate::{MyUi, ValidationErrorInfo, ValidationErrorInfoTrait};
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, Ui};
 use inflector::Inflector;
@@ -50,10 +50,6 @@ pub enum ArgKind {
 impl ArgState {
     pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
         ui.horizontal(|ui| {
-            let is_validation_error = validation_error
-                .as_ref()
-                .map_or(false, |ValidationErrorInfo { name, .. }| name == &self.name);
-
             let label = ui.label(&self.name);
 
             if let Some(desc) = &self.desc {
@@ -63,7 +59,8 @@ impl ArgState {
             match &mut self.kind {
                 ArgKind::String { value, default } => {
                     ui.error_style_if(
-                        (!self.optional && value.is_empty()) || is_validation_error,
+                        (!self.optional && value.is_empty())
+                            || validation_error.is(&self.name).is_some(),
                         |ui| {
                             let text = ui.text_edit_singleline_hint(
                                 value,
@@ -73,11 +70,8 @@ impl ArgState {
                                     .unwrap_or_default(),
                             );
 
-                            if is_validation_error {
-                                if text
-                                    .on_hover_text(&validation_error.as_ref().unwrap().message)
-                                    .changed()
-                                {
+                            if let Some(message) = validation_error.is(&self.name) {
+                                if text.on_hover_text(message).changed() {
                                     *validation_error = None;
                                 }
                             }
@@ -90,7 +84,7 @@ impl ArgState {
                             *i = (*i - 1).max(0);
                         }
 
-                        ui.error_style_if(is_validation_error, |ui| {
+                        ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
                             ui.label(i.to_string());
                         });
 
@@ -99,12 +93,8 @@ impl ArgState {
                         }
                     });
 
-                    if is_validation_error {
-                        if list
-                            .response
-                            .on_hover_text(&validation_error.as_ref().unwrap().message)
-                            .changed()
-                        {
+                    if let Some(message) = validation_error.is(&self.name) {
+                        if list.response.on_hover_text(message).changed() {
                             *validation_error = None;
                         }
                     }
@@ -114,7 +104,7 @@ impl ArgState {
                 }
                 ArgKind::MultipleStrings { values, default } => {
                     let list = ui.vertical(|ui| {
-                        ui.error_style_if(is_validation_error, |ui| {
+                        ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
                             let mut remove_index = None;
                             for (index, value) in values.iter_mut().enumerate() {
                                 ui.horizontal(|ui| {
@@ -141,12 +131,8 @@ impl ArgState {
                         });
                     });
 
-                    if is_validation_error {
-                        if list
-                            .response
-                            .on_hover_text(&validation_error.as_ref().unwrap().message)
-                            .changed()
-                        {
+                    if let Some(message) = validation_error.is(&self.name) {
+                        if list.response.on_hover_text(message).changed() {
                             *validation_error = None;
                         }
                     }
@@ -178,13 +164,10 @@ impl ArgState {
                         }
                     }
 
-                    ui.error_style_if(is_validation_error, |ui| {
+                    ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
                         let text = ui.text_edit_singleline(value);
-                        if is_validation_error {
-                            if text
-                                .on_hover_text(&validation_error.as_ref().unwrap().message)
-                                .changed()
-                            {
+                        if let Some(message) = validation_error.is(&self.name) {
+                            if text.on_hover_text(message).changed() {
                                 *validation_error = None;
                             }
                         }
@@ -197,7 +180,7 @@ impl ArgState {
                     allow_file,
                 } => {
                     let list = ui.vertical(|ui| {
-                        ui.error_style_if(is_validation_error, |ui| {
+                        ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
                             let mut remove_index = None;
                             for (index, value) in values.iter_mut().enumerate() {
                                 ui.horizontal(|ui| {
@@ -240,12 +223,8 @@ impl ArgState {
                         });
                     });
 
-                    if is_validation_error {
-                        if list
-                            .response
-                            .on_hover_text(&validation_error.as_ref().unwrap().message)
-                            .changed()
-                        {
+                    if let Some(message) = validation_error.is(&self.name) {
+                        if list.response.on_hover_text(message).changed() {
                             *validation_error = None;
                         }
                     }
