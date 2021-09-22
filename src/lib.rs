@@ -66,7 +66,9 @@ impl Klask {
         let mut cmd = Command::new(
             std::env::current_exe().map_err(|_| String::from("Couldn't get current exe"))?,
         );
-        cmd.stdout(Stdio::piped()).arg(&self.name);
+        cmd.arg(&self.name)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         match self.state.cmd_args(cmd) {
             Ok(mut cmd) => {
@@ -78,18 +80,28 @@ impl Klask {
                     .spawn()
                     .map_err(|_| String::from("Couldn't spawn a child"))?;
 
-                let mut reader = BufReader::new(
+                let mut stdout_reader = BufReader::new(
                     child
                         .stdout
                         .take()
                         .ok_or_else(|| String::from("Couldn't take stdout"))?,
                 );
 
+                let mut stderr_reader = BufReader::new(
+                    child
+                        .stderr
+                        .take()
+                        .ok_or_else(|| String::from("Couldn't take stderr"))?,
+                );
+
                 let (tx, rx) = mpsc::channel();
                 thread::spawn(move || loop {
                     let mut output = String::new();
-                    if let Ok(0) = reader.read_line(&mut output) {
-                        // End of stdout
+                    if let (Ok(0), Ok(0)) = (
+                        stdout_reader.read_line(&mut output),
+                        stderr_reader.read_line(&mut output),
+                    ) {
+                        // End of output
                         break;
                     }
                     if tx.send(output).is_err() {
