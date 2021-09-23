@@ -5,7 +5,7 @@ use std::{path::PathBuf, thread, time};
 #[derive(Debug, Clap)]
 #[clap(name = "App name")]
 /// Help is displayed at the top
-pub struct Example {
+pub struct Showcase {
     /// Argument help is displayed as tooltips
     required_field: String,
     #[clap(long)]
@@ -46,7 +46,7 @@ pub enum InnerSubcommand {
 }
 
 fn main() {
-    klask::run_derived::<Example, _>(|o| {
+    klask::run_derived::<Showcase, _>(|o| {
         println!("{:#?}", o);
         for i in 0..=5 {
             thread::sleep(time::Duration::from_secs(1));
