@@ -38,13 +38,22 @@ pub enum ArgKind {
         allow_file: bool,
     },
     Choose {
-        value: (String, Uuid),
+        value: ChooseState,
         possible: Vec<String>,
     },
     MultipleChoose {
-        values: Vec<(String, Uuid)>,
+        values: Vec<ChooseState>,
         possible: Vec<String>,
     },
+}
+
+#[derive(Clone)]
+pub struct ChooseState(String, Uuid);
+
+impl Default for ChooseState {
+    fn default() -> Self {
+        Self(Default::default(), Uuid::new_v4())
+    }
 }
 
 impl ArgState {
@@ -180,7 +189,7 @@ impl ArgState {
                     },
                 ),
                 ArgKind::Choose {
-                    value: (value, id),
+                    value: ChooseState(value, id),
                     possible,
                 } => {
                     ComboBox::from_id_source(id)
@@ -202,7 +211,7 @@ impl ArgState {
                     &self.name,
                     values,
                     None,
-                    |ui, (value, id)| {
+                    |ui, ChooseState(value, id)| {
                         ComboBox::from_id_source(id)
                             .selected_text(value.clone())
                             .show_ui(ui, |ui| {
@@ -256,11 +265,13 @@ impl ArgState {
                 }
             }
             ArgKind::MultipleStrings { values, .. } => {
-                for value in values {
+                if !values.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
                         cmd.arg(call_name);
                     }
-                    cmd.arg(value);
+                    for value in values {
+                        cmd.arg(value);
+                    }
                 }
             }
             ArgKind::Path { value, default, .. } => match (&value[..], default, self.optional) {
@@ -288,7 +299,8 @@ impl ArgState {
                 }
             }
             ArgKind::Choose {
-                value: (value, _), ..
+                value: ChooseState(value, _),
+                ..
             } => {
                 if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
@@ -298,7 +310,7 @@ impl ArgState {
                 }
             }
             ArgKind::MultipleChoose { values, .. } => {
-                for (value, _) in values {
+                for ChooseState(value, _) in values {
                     if let Some(call_name) = self.call_name.as_ref() {
                         cmd.arg(call_name);
                     }
@@ -388,7 +400,7 @@ impl From<&Arg<'_>> for ArgState {
             (true, false, _, None) => ArgKind::Occurences(0),
             (false, false, _, None) => ArgKind::Bool(false),
             (false, _, _, Some(possible)) => ArgKind::Choose {
-                value: (
+                value: ChooseState(
                     if optional {
                         "".into()
                     } else {

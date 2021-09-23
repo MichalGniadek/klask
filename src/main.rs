@@ -1,66 +1,56 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use clap::Clap;
-use std::{thread, time};
+use clap::{Clap, ValueHint};
+use std::{path::PathBuf, thread, time};
 
-/// This doc string acts as a help message when the user runs '--help'
-/// as do all doc strings on fields
 #[derive(Debug, Clap)]
-#[clap(version = "1.0", author = "author", name = "name")]
-pub struct Opts {
+#[clap(name = "App name")]
+/// Help is displayed at the top
+pub struct Example {
+    /// Argument help is displayed as tooltips
+    required_field: String,
+    #[clap(long)]
+    optional_field: Option<String>,
+    #[clap(long, default_value = "default value")]
+    field_with_default: String,
+    #[clap(long)]
+    flag: bool,
+    #[clap(short, parse(from_occurrences))]
+    count_occurrences_as_a_nice_counter: i32,
     #[clap(subcommand)]
-    subcmd: SubCommand,
-    /// Sets a custom config file. Could have been an Option<T> with no default too
-    #[clap(short, long, default_value = "default.conf")]
-    config: String,
-    /// Some input. Because this isn't an Option<T> it's required to be used
-    input: String,
-    /// A level of verbosity, and can be used multiple times
-    #[clap(short, long, parse(from_occurrences))]
-    verbose: i32,
+    subcommand: Subcommand,
 }
 
 #[derive(Debug, Clap)]
-pub enum SubCommand {
-    #[clap(version = "1.3", author = "Someone E. <someone_else@other.com>")]
-    Test(Test),
-    Run(Run),
-    Walk(Walk),
+pub enum Subcommand {
+    /// Subcommands also display help
+    SubcommandA {
+        #[clap(long, parse(from_os_str), value_hint = ValueHint::AnyPath)]
+        native_path_picker: Option<PathBuf>,
+        #[clap(possible_values = &["One", "Two", "Three"])]
+        choose_one: String,
+        #[clap(subcommand)]
+        inner: InnerSubcommand,
+    },
+    SubcommandB {},
 }
 
-/// A subcommand for controlling testing
 #[derive(Debug, Clap)]
-pub struct Test {
-    /// Print debug info
-    #[clap(short)]
-    debug: bool,
-}
-
-/// A subcommand for running
-#[derive(Debug, Clap)]
-pub struct Run {
-    /// Example
-    lalala: String,
-    hoho: Option<i32>,
-}
-
-/// A subcommand for running2
-#[derive(Debug, Clap)]
-pub struct Walk {
-    /// Example2
-    #[clap(short, multiple_occurrences(true))]
-    mult: Vec<String>,
+pub enum InnerSubcommand {
+    InnerSubcommandA {
+        #[clap(short, multiple_occurrences(true))]
+        multiple_values: Vec<String>,
+    },
+    InnerSubcommandB,
+    InnerSubcommandC,
+    InnerSubcommandD,
 }
 
 fn main() {
-    klask::run_derived::<Opts, _>(|o| {
+    klask::run_derived::<Example, _>(|o| {
         println!("{:#?}", o);
-        for _ in 0..5 {
+        for i in 0..=5 {
             thread::sleep(time::Duration::from_secs(1));
-            eprintln!("A");
+            eprintln!("Counting to 5: {}", i);
         }
     });
-    // Klask::run_app(
-    //     clap::App::new("Name").arg(clap::Arg::new("test").short('t').default_value("def")),
-    //     |m| println!("{:#?}", m),
-    // );
 }
