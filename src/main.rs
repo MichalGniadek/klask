@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use clap::Clap;
-use klask::Klask;
 use std::{thread, time};
 
 /// This doc string acts as a help message when the user runs '--help'
@@ -53,7 +52,7 @@ pub struct Walk {
 }
 
 fn main() {
-    Klask::run_derived::<Opts, _>(|o| {
+    klask::run_derived::<Opts, _>(|o| {
         println!("{:#?}", o);
         for _ in 0..5 {
             thread::sleep(time::Duration::from_secs(1));
