@@ -11,7 +11,9 @@ Allows you to create a gui application automatically with clap. Uses egui for fo
 Unfurtunately there are still many edge- (and not so edge-) cases where the command generation breaks.
 
 Example gui:
+
 ![image showcasing the gui](image0.png)
 
 Generated from miniserve's app:
+
 ![image showcasing the gui](image1.png)
