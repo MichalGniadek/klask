@@ -2,8 +2,30 @@
 #![warn(missing_docs)]
 
 //! You can use [`run_app`] for [`App`]s created manually or generated from yaml and
-//! [`run_derived`] for [`App`]s derived from a struct.
-
+//! [`run_derived`] for [`App`]s derived from a struct. Both of these functions take
+//! a closure that contains the code that would normally be in `main`. They should be
+//! the last thing you call in `main`.
+//!
+//! For example
+//! ```no_run
+//! # use clap::{App, Arg};
+//! fn main() {
+//!     let app = App::new("Example").arg(Arg::new("debug").short('d'));
+//!     klask::run_app(app, |matches| {
+//!        println!("{}", matches.is_present("debug"))
+//!     });
+//! }
+//! ```
+//! corresponds to
+//! ```no_run
+//! # use clap::{App, Arg};
+//! fn main() {
+//!     let app = App::new("Example").arg(Arg::new("debug").short('d'));
+//!     let matches = app.get_matches();
+//!     println!("{}", matches.is_present("debug"))
+//! }
+//! ```
+//! Currently requires nightly.
 mod app_state;
 mod arg_state;
 mod child_app;
@@ -21,23 +43,14 @@ use error::{ExecuteError, ValidationErrorInfo};
 use klask_ui::KlaskUi;
 use std::process::Command;
 
-/// Call with a clap App and a closure that contains the rest of the code that would normally be in main.
-/// Currently requires nightly.
-///
-/// For example
+/// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
 /// # use clap::{App, Arg};
 /// let app = App::new("Example").arg(Arg::new("debug").short('d'));
+
 /// klask::run_app(app, |matches| {
 ///    println!("{}", matches.is_present("debug"))
 /// });
-/// ```
-/// corresponds to
-/// ```no_run
-/// # use clap::{App, Arg};
-/// let app = App::new("Example").arg(Arg::new("debug").short('d'));
-/// let matches = app.get_matches();
-/// println!("{}", matches.is_present("debug"))
 /// ```
 pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
     // Wrap app in another in case no arguments is a valid configuration
@@ -64,7 +77,8 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
     }
 }
 
-/// Can be used with a struct deriving Clap. Call with a closure that contains the rest of the code that would normally be in main.
+/// Can be used with a struct deriving [`clap::Clap`]. Call with a closure that contains the code that would normally be in `main`.
+/// It's just a wrapper over [`run_app`].
 /// ```no_run
 /// # use clap::{App, Arg, Clap};
 /// #[derive(Clap)]

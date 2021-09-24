@@ -1,3 +1,7 @@
+[![crates.io](https://img.shields.io/crates/v/klask?style=for-the-badge)](https://crates.io/crates/klask)
+[![license](https://img.shields.io/crates/l/klask?style=for-the-badge)](LICENSE)
+[![docs.rs](https://img.shields.io/docsrs/klask?style=for-the-badge)](https://docs.rs/klask)
+
 # Klask
 Allows you to create a gui application automatically from clap (v3). Uses egui for graphics. Currently, requires nightly.
 
