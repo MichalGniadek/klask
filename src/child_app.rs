@@ -6,6 +6,7 @@ use std::{
     thread,
 };
 
+#[derive(Debug)]
 pub struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,

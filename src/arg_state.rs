@@ -6,6 +6,7 @@ use native_dialog::FileDialog;
 use std::process::Command;
 use uuid::Uuid;
 
+#[derive(Debug, Clone)]
 pub struct ArgState {
     pub name: String,
     pub call_name: Option<String>,
@@ -14,6 +15,7 @@ pub struct ArgState {
     pub kind: ArgKind,
 }
 
+#[derive(Debug, Clone)]
 pub enum ArgKind {
     String {
         value: String,
@@ -47,7 +49,7 @@ pub enum ArgKind {
     },
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ChooseState(String, Uuid);
 
 impl Default for ChooseState {

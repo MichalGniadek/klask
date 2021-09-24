@@ -1,8 +1,11 @@
 [package]
 name = "klask"
-version = "0.1.0"
-authors = ["Michal Gniadek <mgniadek@interia.pl>"]
+version = "0.2.0"
+authors = ["Michał Gniadek <mgniadek@interia.pl>"]
 edition = "2021"
+license = "MIT"
+description = "Automatically create GUI for clap apps"
+repository = "https://github.com/MichalGniadek/klask"
 
 [dependencies]
 Inflector = "0.11.4"

@@ -1,4 +1,9 @@
 #![feature(command_access)]
+#![warn(missing_docs)]
+
+//! You can use [`run_app`] for [`App`]s created manually or generated from yaml and
+//! [`run_derived`] for [`App`]s derived from a struct.
+
 mod app_state;
 mod arg_state;
 mod child_app;
@@ -16,6 +21,24 @@ use error::{ExecuteError, ValidationErrorInfo};
 use klask_ui::KlaskUi;
 use std::process::Command;
 
+/// Call with a clap App and a closure that contains the rest of the code that would normally be in main.
+/// Currently requires nightly.
+///
+/// For example
+/// ```no_run
+/// # use clap::{App, Arg};
+/// let app = App::new("Example").arg(Arg::new("debug").short('d'));
+/// klask::run_app(app, |matches| {
+///    println!("{}", matches.is_present("debug"))
+/// });
+/// ```
+/// corresponds to
+/// ```no_run
+/// # use clap::{App, Arg};
+/// let app = App::new("Example").arg(Arg::new("debug").short('d'));
+/// let matches = app.get_matches();
+/// println!("{}", matches.is_present("debug"))
+/// ```
 pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
     // Wrap app in another in case no arguments is a valid configuration
     match App::new("outer").subcommand(app.clone()).try_get_matches() {
@@ -41,6 +64,19 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
     }
 }
 
+/// Can be used with a struct deriving Clap. Call with a closure that contains the rest of the code that would normally be in main.
+/// ```no_run
+/// # use clap::{App, Arg, Clap};
+/// #[derive(Clap)]
+/// struct Example {
+///     #[clap(short)]
+///     debug: bool,
+/// }
+///
+/// klask::run_derived::<Example, _>(|example|{
+///     println!("{}", example.debug);
+/// });
+/// ```
 pub fn run_derived<C, F>(f: F)
 where
     C: IntoApp + FromArgMatches,
@@ -54,6 +90,7 @@ where
     });
 }
 
+#[derive(Debug)]
 struct Klask {
     output: Option<Result<ChildApp, ExecuteError>>,
     state: AppState,

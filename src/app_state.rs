@@ -4,6 +4,7 @@ use eframe::egui::Ui;
 use inflector::Inflector;
 use std::{collections::BTreeMap, process::Command};
 
+#[derive(Debug, Clone)]
 pub struct AppState {
     about: Option<String>,
     args: Vec<ArgState>,
