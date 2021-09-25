@@ -23,7 +23,6 @@
 //!     println!("{}", matches.is_present("debug"))
 //! }
 //! ```
-//! Currently requires nightly.
 
 mod app_state;
 mod arg_state;
