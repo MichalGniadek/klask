@@ -1,8 +1,7 @@
 use super::AppState;
-use crate::arg_state::{ArgKind, ArgState, ChooseState};
+use crate::arg_state::{ArgKind, ArgState};
 use clap::{Clap, FromArgMatches, IntoApp, ValueHint};
 use std::{fmt::Debug, path::PathBuf};
-use uuid::Uuid;
 
 #[derive(Debug, Clap, PartialEq, Eq)]
 struct ForbidEmpty {
@@ -101,26 +100,15 @@ where
 impl crate::arg_state::ArgState {
     fn enter_value(&mut self, val: &str) {
         match &mut self.kind {
-            ArgKind::String { value, .. }
-            | ArgKind::Path { value, .. }
-            | ArgKind::Choose {
-                value: ChooseState(value, _),
-                ..
-            } => *value = val.to_string(),
+            ArgKind::String { value, .. } => *value = val.to_string(),
             _ => panic!("Called enter_value on {:?}", self),
         }
     }
 
     fn enter_values(&mut self, vals: &[&str]) {
         match &mut self.kind {
-            ArgKind::MultipleStrings { values, .. } | ArgKind::MultiplePaths { values, .. } => {
-                *values = vals.iter().map(|s| s.to_string()).collect()
-            }
-            ArgKind::MultipleChoose { values, .. } => {
-                *values = vals
-                    .iter()
-                    .map(|s| ChooseState(s.to_string(), Uuid::default()))
-                    .collect()
+            ArgKind::MultipleStrings { values, .. } => {
+                *values = vals.iter().map(|s| s.to_string().into()).collect()
             }
             _ => panic!("Called enter_value on {:?}", self),
         }

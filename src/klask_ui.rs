@@ -16,7 +16,7 @@ pub trait KlaskUi {
         f: F,
     ) where
         T: Clone + Default,
-        F: FnMut(&mut Ui, &mut T) -> Response;
+        F: FnMut(&mut Ui, &mut T);
 }
 
 impl KlaskUi for Ui {
@@ -109,7 +109,7 @@ impl KlaskUi for Ui {
         mut f: F,
     ) where
         T: Clone + Default,
-        F: FnMut(&mut Ui, &mut T) -> Response,
+        F: FnMut(&mut Ui, &mut T),
     {
         let list = self.vertical(|ui| {
             ui.error_style_if(validation_error.is(name).is_some(), |ui| {
