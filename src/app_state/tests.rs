@@ -5,11 +5,48 @@ use std::{fmt::Debug, path::PathBuf};
 use uuid::Uuid;
 
 #[derive(Debug, Clap, PartialEq, Eq)]
+struct ForbidEmpty {
+    #[clap(long, forbid_empty_values = true)]
+    optional_no_empty1: Option<String>,
+    #[clap(long, forbid_empty_values = true)]
+    optional_no_empty2: Option<String>,
+    #[clap(long, forbid_empty_values = true)]
+    optional_no_empty3: Option<String>,
+}
+
+#[test]
+fn forbid_empty() {
+    test_app(
+        |args| {
+            args[0].enter_value("a");
+            args[2].enter_value("");
+        },
+        ForbidEmpty {
+            optional_no_empty1: Some("a".into()),
+            optional_no_empty2: None,
+            optional_no_empty3: None,
+        },
+    );
+}
+
+#[derive(Debug, Clap, PartialEq, Eq)]
 struct OptionalAndDefault {
     required: String,
     optional: Option<String>,
     #[clap(default_value = "d")]
     default: String,
+}
+
+#[test]
+fn optional_and_default() {
+    test_app(
+        |args| args[0].enter_value("a"),
+        OptionalAndDefault {
+            required: "a".into(),
+            optional: None,
+            default: "d".into(),
+        },
+    );
 }
 
 #[derive(Debug, Clap, PartialEq, Eq)]
@@ -24,18 +61,6 @@ struct UseEquals {
     choose: String,
     #[clap(long, require_equals = true, multiple_occurrences = true)]
     multiple: Vec<String>,
-}
-
-#[test]
-fn optional_and_default() {
-    test_app(
-        |args| args[0].enter_value("a"),
-        OptionalAndDefault {
-            required: "a".into(),
-            optional: None,
-            default: "d".into(),
-        },
-    );
 }
 
 #[test]

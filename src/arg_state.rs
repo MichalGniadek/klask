@@ -358,8 +358,7 @@ impl From<&Arg<'_>> for ArgState {
             .map(ToString::to_string)
             .or_else(|| a.get_about().map(ToString::to_string));
 
-        let optional =
-            !a.is_set(ArgSettings::Required) && !a.is_set(ArgSettings::ForbidEmptyValues);
+        let optional = !a.is_set(ArgSettings::Required);
 
         use ValueHint::*;
         let kind = match (
