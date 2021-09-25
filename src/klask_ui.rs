@@ -21,8 +21,9 @@ pub trait KlaskUi {
 
 impl KlaskUi for Ui {
     fn error_style_if<F: FnOnce(&mut Ui) -> R, R>(&mut self, is_error: bool, f: F) -> R {
-        if is_error {
+        let previous = if is_error {
             let visuals = &mut self.style_mut().visuals;
+            let previous = visuals.clone();
             visuals.widgets.inactive.bg_stroke.color = Color32::RED;
             visuals.widgets.inactive.bg_stroke.width = 1.0;
             visuals.widgets.hovered.bg_stroke.color = Color32::RED;
@@ -30,12 +31,15 @@ impl KlaskUi for Ui {
             visuals.widgets.open.bg_stroke.color = Color32::RED;
             visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
             visuals.selection.stroke.color = Color32::RED;
-        }
+            Some(previous)
+        } else {
+            None
+        };
 
         let ret = f(self);
 
-        if is_error {
-            self.reset_style();
+        if let Some(previous) = previous {
+            self.style_mut().visuals = previous;
         }
 
         ret

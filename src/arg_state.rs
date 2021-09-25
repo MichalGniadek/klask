@@ -60,75 +60,75 @@ impl Default for ChooseState {
 
 impl ArgState {
     pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
-        ui.horizontal(|ui| {
-            let label = ui.label(&self.name);
+        let label = ui.label(&self.name);
 
-            if let Some(desc) = &self.desc {
-                label.on_hover_text(desc);
-            }
+        if let Some(desc) = &self.desc {
+            label.on_hover_text(desc);
+        }
 
-            match &mut self.kind {
-                ArgKind::String { value, default } => {
-                    ui.error_style_if(
-                        (!self.optional && value.is_empty())
-                            || validation_error.is(&self.name).is_some(),
-                        |ui| {
-                            let text = ui.text_edit_singleline_hint(
-                                value,
-                                match (default, self.optional) {
-                                    (Some(default), _) => default.as_str(),
-                                    (_, true) => "(Optional)",
-                                    (_, false) => "",
-                                },
-                            );
+        match &mut self.kind {
+            ArgKind::String { value, default } => {
+                ui.error_style_if(
+                    (!self.optional && value.is_empty())
+                        || validation_error.is(&self.name).is_some(),
+                    |ui| {
+                        let text = ui.text_edit_singleline_hint(
+                            value,
+                            match (default, self.optional) {
+                                (Some(default), _) => default.as_str(),
+                                (_, true) => "(Optional)",
+                                (_, false) => "",
+                            },
+                        );
 
-                            if let Some(message) = validation_error.is(&self.name) {
-                                if text.on_hover_text(message).changed() {
-                                    *validation_error = None;
-                                }
+                        if let Some(message) = validation_error.is(&self.name) {
+                            if text.on_hover_text(message).changed() {
+                                *validation_error = None;
                             }
-                        },
-                    );
-                }
-                ArgKind::Occurences(i) => {
-                    let list = ui.horizontal(|ui| {
-                        if ui.small_button("-").clicked() {
-                            *i = (*i - 1).max(0);
                         }
+                    },
+                );
+            }
+            ArgKind::Occurences(i) => {
+                let list = ui.horizontal(|ui| {
+                    if ui.small_button("-").clicked() {
+                        *i = (*i - 1).max(0);
+                    }
 
-                        ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
-                            ui.label(i.to_string());
-                        });
-
-                        if ui.small_button("+").clicked() {
-                            *i += 1;
-                        }
+                    ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
+                        ui.label(i.to_string());
                     });
 
-                    if let Some(message) = validation_error.is(&self.name) {
-                        if list.response.on_hover_text(message).changed() {
-                            *validation_error = None;
-                        }
+                    if ui.small_button("+").clicked() {
+                        *i += 1;
+                    }
+                });
+
+                if let Some(message) = validation_error.is(&self.name) {
+                    if list.response.on_hover_text(message).changed() {
+                        *validation_error = None;
                     }
                 }
-                ArgKind::Bool(bool) => {
-                    ui.checkbox(bool, "");
-                }
-                ArgKind::MultipleStrings { values, default } => {
-                    ui.multiple_values(
-                        validation_error,
-                        &self.name,
-                        values,
-                        Some(default),
-                        |ui, value| ui.text_edit_singleline(value),
-                    );
-                }
-                ArgKind::Path {
-                    value,
-                    default,
-                    allow_dir,
-                    allow_file,
-                } => {
+            }
+            ArgKind::Bool(bool) => {
+                ui.checkbox(bool, "");
+            }
+            ArgKind::MultipleStrings { values, default } => {
+                ui.multiple_values(
+                    validation_error,
+                    &self.name,
+                    values,
+                    Some(default),
+                    |ui, value| ui.text_edit_singleline(value),
+                );
+            }
+            ArgKind::Path {
+                value,
+                default,
+                allow_dir,
+                allow_file,
+            } => {
+                ui.horizontal(|ui| {
                     if *allow_file && ui.button("Select file...").clicked() {
                         if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
                         {
@@ -159,73 +159,71 @@ impl ArgState {
                             }
                         }
                     });
-                }
-                ArgKind::MultiplePaths {
-                    values,
-                    default,
-                    allow_dir,
-                    allow_file,
-                } => ui.multiple_values(
-                    validation_error,
-                    &self.name,
-                    values,
-                    Some(default),
-                    |ui, value| {
-                        if *allow_file && ui.button("Select file...").clicked() {
-                            if let Some(file) =
-                                FileDialog::new().show_open_single_file().ok().flatten()
-                            {
-                                *value = file.to_string_lossy().into_owned();
-                            }
-                        };
+                });
+            }
+            ArgKind::MultiplePaths {
+                values,
+                default,
+                allow_dir,
+                allow_file,
+            } => ui.multiple_values(
+                validation_error,
+                &self.name,
+                values,
+                Some(default),
+                |ui, value| {
+                    if *allow_file && ui.button("Select file...").clicked() {
+                        if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
+                        {
+                            *value = file.to_string_lossy().into_owned();
+                        }
+                    };
 
-                        if *allow_dir && ui.button("Select directory...").clicked() {
-                            if let Some(file) =
-                                FileDialog::new().show_open_single_dir().ok().flatten()
-                            {
-                                *value = file.to_string_lossy().into_owned();
-                            }
-                        };
+                    if *allow_dir && ui.button("Select directory...").clicked() {
+                        if let Some(file) = FileDialog::new().show_open_single_dir().ok().flatten()
+                        {
+                            *value = file.to_string_lossy().into_owned();
+                        }
+                    };
 
-                        ui.text_edit_singleline(value)
-                    },
-                ),
-                ArgKind::Choose {
-                    value: ChooseState(value, id),
-                    possible,
-                } => {
+                    ui.text_edit_singleline(value)
+                },
+            ),
+            ArgKind::Choose {
+                value: ChooseState(value, id),
+                possible,
+            } => {
+                ComboBox::from_id_source(id)
+                    .selected_text(value.clone())
+                    .show_ui(ui, |ui| {
+                        if self.optional {
+                            ui.selectable_value(value, String::new(), "None");
+                        }
+                        for p in possible {
+                            ui.selectable_value(value, p.clone(), p);
+                        }
+                    });
+            }
+            ArgKind::MultipleChoose {
+                values,
+                ref possible,
+            } => ui.multiple_values(
+                validation_error,
+                &self.name,
+                values,
+                None,
+                |ui, ChooseState(value, id)| {
                     ComboBox::from_id_source(id)
                         .selected_text(value.clone())
                         .show_ui(ui, |ui| {
-                            if self.optional {
-                                ui.selectable_value(value, String::new(), "None");
-                            }
                             for p in possible {
                                 ui.selectable_value(value, p.clone(), p);
                             }
-                        });
-                }
-                ArgKind::MultipleChoose {
-                    values,
-                    ref possible,
-                } => ui.multiple_values(
-                    validation_error,
-                    &self.name,
-                    values,
-                    None,
-                    |ui, ChooseState(value, id)| {
-                        ComboBox::from_id_source(id)
-                            .selected_text(value.clone())
-                            .show_ui(ui, |ui| {
-                                for p in possible {
-                                    ui.selectable_value(value, p.clone(), p);
-                                }
-                            })
-                            .response
-                    },
-                ),
-            };
-        });
+                        })
+                        .response
+                },
+            ),
+        };
     }
 
     pub fn set_cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
