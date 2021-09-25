@@ -134,8 +134,13 @@ impl KlaskUi for Ui {
                         values.push(T::default());
                     }
                     if let Some(default) = default {
+                        let text = if default.is_empty() {
+                            "Reset"
+                        } else {
+                            "Reset to default"
+                        };
                         ui.add_space(20.0);
-                        if ui.button("Reset to default").clicked() {
+                        if ui.button(text).clicked() {
                             *values = default.clone();
                         }
                     }
