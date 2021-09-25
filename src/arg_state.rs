@@ -11,6 +11,7 @@ pub struct ArgState {
     pub call_name: Option<String>,
     pub desc: Option<String>,
     pub optional: bool,
+    pub use_equals: bool,
     pub kind: ArgKind,
 }
 
@@ -237,9 +238,14 @@ impl ArgState {
             ArgKind::String { value, .. } => {
                 if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        args.push(call_name.clone());
+                        if self.use_equals {
+                            args.push(format!("{}={}", call_name, value));
+                        } else {
+                            args.extend_from_slice(&[call_name.clone(), value.clone()]);
+                        }
+                    } else {
+                        args.push(value.clone());
                     }
-                    args.push(value.clone());
                 } else if !self.optional {
                     return Err(format!("{} is required.", self.name));
                 }
@@ -263,11 +269,14 @@ impl ArgState {
                 }
             }
             ArgKind::MultipleStrings { values, .. } => {
-                if !values.is_empty() {
+                for value in values {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        args.push(call_name.clone());
-                    }
-                    for value in values {
+                        if self.use_equals {
+                            args.push(format!("{}={}", call_name, value));
+                        } else {
+                            args.extend_from_slice(&[call_name.clone(), value.clone()]);
+                        }
+                    } else {
                         args.push(value.clone());
                     }
                 }
@@ -275,19 +284,29 @@ impl ArgState {
             ArgKind::Path { value, .. } => {
                 if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        args.push(call_name.clone());
+                        if self.use_equals {
+                            args.push(format!("{}={}", call_name, value));
+                        } else {
+                            args.extend_from_slice(&[call_name.clone(), value.clone()]);
+                        }
+                    } else {
+                        args.push(value.clone());
                     }
-                    args.push(value.clone());
                 } else if !self.optional {
                     return Err(format!("{} is required.", self.name));
-                };
+                }
             }
             ArgKind::MultiplePaths { values, .. } => {
                 for value in values {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        args.push(call_name.clone());
+                        if self.use_equals {
+                            args.push(format!("{}={}", call_name, value));
+                        } else {
+                            args.extend_from_slice(&[call_name.clone(), value.clone()]);
+                        }
+                    } else {
+                        args.push(value.clone());
                     }
-                    args.push(value.clone());
                 }
             }
             ArgKind::Choose {
@@ -296,17 +315,29 @@ impl ArgState {
             } => {
                 if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        args.push(call_name.clone());
+                        if self.use_equals {
+                            args.push(format!("{}={}", call_name, value));
+                        } else {
+                            args.extend_from_slice(&[call_name.clone(), value.clone()]);
+                        }
+                    } else {
+                        args.push(value.clone());
                     }
-                    args.push(value.clone());
+                } else if !self.optional {
+                    return Err(format!("{} is required.", self.name));
                 }
             }
             ArgKind::MultipleChoose { values, .. } => {
                 for ChooseState(value, _) in values {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        args.push(call_name.clone());
+                        if self.use_equals {
+                            args.push(format!("{}={}", call_name, value));
+                        } else {
+                            args.extend_from_slice(&[call_name.clone(), value.clone()]);
+                        }
+                    } else {
+                        args.push(value.clone());
                     }
-                    args.push(value.clone());
                 }
             }
         }
@@ -317,16 +348,10 @@ impl ArgState {
 
 impl From<&Arg<'_>> for ArgState {
     fn from(a: &Arg) -> Self {
-        let mut call_name = a
+        let call_name = a
             .get_long()
             .map(|s| format!("--{}", s))
             .or_else(|| a.get_short().map(|c| format!("-{}", c)));
-
-        if a.is_set(ArgSettings::RequireEquals) {
-            if let Some(call_name) = &mut call_name {
-                call_name.push('=');
-            }
-        }
 
         let desc = a
             .get_long_about()
@@ -413,6 +438,7 @@ impl From<&Arg<'_>> for ArgState {
             call_name,
             desc,
             optional,
+            use_equals: a.is_set(ArgSettings::RequireEquals),
             kind,
         }
     }
