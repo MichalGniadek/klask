@@ -2,7 +2,7 @@ use crate::{arg_state::ArgState, ValidationErrorInfo};
 use clap::App;
 use eframe::egui::{Grid, Ui};
 use inflector::Inflector;
-use std::{collections::BTreeMap, process::Command};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -78,16 +78,16 @@ impl AppState {
         }
     }
 
-    pub fn set_cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
+    pub fn get_cmd_args(&self, mut args: Vec<String>) -> Result<Vec<String>, String> {
         for arg in &self.args {
-            cmd = arg.set_cmd_args(cmd)?;
+            args = arg.get_cmd_args(args)?;
         }
 
         if let Some(current) = &self.current {
-            cmd.arg(current);
-            self.subcommands[current].set_cmd_args(cmd)
+            args.push(current.clone());
+            self.subcommands[current].get_cmd_args(args)
         } else {
-            Ok(cmd)
+            Ok(args)
         }
     }
 }

@@ -15,8 +15,12 @@ pub struct ChildApp {
 }
 
 impl ChildApp {
-    pub fn run(cmd: &mut Command) -> Result<Self, ExecuteError> {
-        let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    pub fn run(args: Vec<String>) -> Result<Self, ExecuteError> {
+        let mut child = Command::new(std::env::current_exe()?)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
 
         let stdout =
             Self::spawn_thread_reader(child.stdout.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
@@ -32,20 +36,8 @@ impl ChildApp {
     }
 
     pub fn read(&mut self) -> &str {
-        let mut read = |stdio: &mut Option<Receiver<Option<String>>>| {
-            if let Some(receiver) = stdio {
-                for line in receiver.try_iter() {
-                    if let Some(line) = line {
-                        self.output.push_str(&line);
-                    } else {
-                        *stdio = None;
-                        return;
-                    }
-                }
-            }
-        };
-        read(&mut self.stdout);
-        read(&mut self.stderr);
+        Self::read_stdio(&mut self.output, &mut self.stdout);
+        Self::read_stdio(&mut self.output, &mut self.stderr);
         &self.output
     }
 
@@ -75,5 +67,18 @@ impl ChildApp {
             }
         });
         rx
+    }
+
+    fn read_stdio(output: &mut String, stdio: &mut Option<Receiver<Option<String>>>) {
+        if let Some(receiver) = stdio {
+            for line in receiver.try_iter() {
+                if let Some(line) = line {
+                    output.push_str(&line);
+                } else {
+                    *stdio = None;
+                    return;
+                }
+            }
+        }
     }
 }

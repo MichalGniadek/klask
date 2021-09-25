@@ -3,7 +3,6 @@ use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, Ui};
 use inflector::Inflector;
 use native_dialog::FileDialog;
-use std::process::Command;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -66,22 +65,29 @@ impl ArgState {
             label.on_hover_text(desc);
         }
 
-        match &mut self.kind {
+        // Not needed in edition 2021 with new closure borrowing rules
+        let ArgState {
+            name,
+            optional,
+            kind,
+            ..
+        } = self;
+
+        match kind {
             ArgKind::String { value, default } => {
                 ui.error_style_if(
-                    (!self.optional && value.is_empty())
-                        || validation_error.is(&self.name).is_some(),
+                    (!*optional && value.is_empty()) || validation_error.is(name).is_some(),
                     |ui| {
                         let text = ui.text_edit_singleline_hint(
                             value,
-                            match (default, self.optional) {
+                            match (default, *optional) {
                                 (Some(default), _) => default.as_str(),
                                 (_, true) => "(Optional)",
                                 (_, false) => "",
                             },
                         );
 
-                        if let Some(message) = validation_error.is(&self.name) {
+                        if let Some(message) = validation_error.is(name) {
                             if text.on_hover_text(message).changed() {
                                 *validation_error = None;
                             }
@@ -95,7 +101,7 @@ impl ArgState {
                         *i = (*i - 1).max(0);
                     }
 
-                    ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
+                    ui.error_style_if(validation_error.is(name).is_some(), |ui| {
                         ui.label(i.to_string());
                     });
 
@@ -104,7 +110,7 @@ impl ArgState {
                     }
                 });
 
-                if let Some(message) = validation_error.is(&self.name) {
+                if let Some(message) = validation_error.is(name) {
                     if list.response.on_hover_text(message).changed() {
                         *validation_error = None;
                     }
@@ -116,7 +122,7 @@ impl ArgState {
             ArgKind::MultipleStrings { values, default } => {
                 ui.multiple_values(
                     validation_error,
-                    &self.name,
+                    name,
                     values,
                     Some(default),
                     |ui, value| ui.text_edit_singleline(value),
@@ -150,10 +156,10 @@ impl ArgState {
                         }
                     }
 
-                    ui.error_style_if(validation_error.is(&self.name).is_some(), |ui| {
+                    ui.error_style_if(validation_error.is(name).is_some(), |ui| {
                         let text = ui.text_edit_singleline(value);
 
-                        if let Some(message) = validation_error.is(&self.name) {
+                        if let Some(message) = validation_error.is(name) {
                             if text.on_hover_text(message).changed() {
                                 *validation_error = None;
                             }
@@ -168,7 +174,7 @@ impl ArgState {
                 allow_file,
             } => ui.multiple_values(
                 validation_error,
-                &self.name,
+                name,
                 values,
                 Some(default),
                 |ui, value| {
@@ -196,7 +202,7 @@ impl ArgState {
                 ComboBox::from_id_source(id)
                     .selected_text(value.clone())
                     .show_ui(ui, |ui| {
-                        if self.optional {
+                        if *optional {
                             ui.selectable_value(value, String::new(), "None");
                         }
                         for p in possible {
@@ -209,7 +215,7 @@ impl ArgState {
                 ref possible,
             } => ui.multiple_values(
                 validation_error,
-                &self.name,
+                name,
                 values,
                 None,
                 |ui, ChooseState(value, id)| {
@@ -226,7 +232,7 @@ impl ArgState {
         };
     }
 
-    pub fn set_cmd_args(&self, mut cmd: Command) -> Result<Command, String> {
+    pub fn get_cmd_args(&self, mut args: Vec<String>) -> Result<Vec<String>, String> {
         match &self.kind {
             ArgKind::String { value, default } => {
                 match (&value[..], default, self.optional) {
@@ -234,32 +240,32 @@ impl ArgState {
                     ("", None, false) => return Err(format!("{} is required.", self.name)),
                     ("", Some(default), _) => {
                         if let Some(call_name) = self.call_name.as_ref() {
-                            cmd.arg(call_name);
+                            args.push(call_name.clone());
                         }
-                        cmd.arg(default);
+                        args.push(default.clone());
                     }
                     (value, _, _) => {
                         if let Some(call_name) = self.call_name.as_ref() {
-                            cmd.arg(call_name);
+                            args.push(call_name.clone());
                         }
-                        cmd.arg(value);
+                        args.push(value.to_string());
                     }
                 };
             }
             &ArgKind::Occurences(i) => {
                 for _ in 0..i {
-                    cmd.arg(
+                    args.push(
                         self.call_name
-                            .as_ref()
+                            .clone()
                             .ok_or_else(|| "Internal error.".to_string())?,
                     );
                 }
             }
             &ArgKind::Bool(bool) => {
                 if bool {
-                    cmd.arg(
+                    args.push(
                         self.call_name
-                            .as_ref()
+                            .clone()
                             .ok_or_else(|| "Internal error.".to_string())?,
                     );
                 }
@@ -267,10 +273,10 @@ impl ArgState {
             ArgKind::MultipleStrings { values, .. } => {
                 if !values.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        cmd.arg(call_name);
+                        args.push(call_name.clone());
                     }
                     for value in values {
-                        cmd.arg(value);
+                        args.push(value.clone());
                     }
                 }
             }
@@ -279,23 +285,23 @@ impl ArgState {
                 ("", None, false) => return Err(format!("{} is required.", self.name)),
                 ("", Some(default), _) => {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        cmd.arg(call_name);
+                        args.push(call_name.clone());
                     }
-                    cmd.arg(default);
+                    args.push(default.clone());
                 }
                 (value, _, _) => {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        cmd.arg(call_name);
+                        args.push(call_name.clone());
                     }
-                    cmd.arg(value);
+                    args.push(value.to_string());
                 }
             },
             ArgKind::MultiplePaths { values, .. } => {
                 for value in values {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        cmd.arg(call_name);
+                        args.push(call_name.clone());
                     }
-                    cmd.arg(value);
+                    args.push(value.clone());
                 }
             }
             ArgKind::Choose {
@@ -304,22 +310,22 @@ impl ArgState {
             } => {
                 if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        cmd.arg(call_name);
+                        args.push(call_name.clone());
                     }
-                    cmd.arg(value);
+                    args.push(value.clone());
                 }
             }
             ArgKind::MultipleChoose { values, .. } => {
                 for ChooseState(value, _) in values {
                     if let Some(call_name) = self.call_name.as_ref() {
-                        cmd.arg(call_name);
+                        args.push(call_name.clone());
                     }
-                    cmd.arg(value);
+                    args.push(value.clone());
                 }
             }
         }
 
-        Ok(cmd)
+        Ok(args)
     }
 }
 
