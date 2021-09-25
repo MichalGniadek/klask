@@ -234,23 +234,15 @@ impl ArgState {
 
     pub fn get_cmd_args(&self, mut args: Vec<String>) -> Result<Vec<String>, String> {
         match &self.kind {
-            ArgKind::String { value, default } => {
-                match (&value[..], default, self.optional) {
-                    ("", None, true) => {}
-                    ("", None, false) => return Err(format!("{} is required.", self.name)),
-                    ("", Some(default), _) => {
-                        if let Some(call_name) = self.call_name.as_ref() {
-                            args.push(call_name.clone());
-                        }
-                        args.push(default.clone());
+            ArgKind::String { value, .. } => {
+                if !value.is_empty() {
+                    if let Some(call_name) = self.call_name.as_ref() {
+                        args.push(call_name.clone());
                     }
-                    (value, _, _) => {
-                        if let Some(call_name) = self.call_name.as_ref() {
-                            args.push(call_name.clone());
-                        }
-                        args.push(value.to_string());
-                    }
-                };
+                    args.push(value.clone());
+                } else if !self.optional {
+                    return Err(format!("{} is required.", self.name));
+                }
             }
             &ArgKind::Occurences(i) => {
                 for _ in 0..i {
@@ -280,22 +272,16 @@ impl ArgState {
                     }
                 }
             }
-            ArgKind::Path { value, default, .. } => match (&value[..], default, self.optional) {
-                ("", None, true) => {}
-                ("", None, false) => return Err(format!("{} is required.", self.name)),
-                ("", Some(default), _) => {
+            ArgKind::Path { value, .. } => {
+                if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
                         args.push(call_name.clone());
                     }
-                    args.push(default.clone());
-                }
-                (value, _, _) => {
-                    if let Some(call_name) = self.call_name.as_ref() {
-                        args.push(call_name.clone());
-                    }
-                    args.push(value.to_string());
-                }
-            },
+                    args.push(value.clone());
+                } else if !self.optional {
+                    return Err(format!("{} is required.", self.name));
+                };
+            }
             ArgKind::MultiplePaths { values, .. } => {
                 for value in values {
                     if let Some(call_name) = self.call_name.as_ref() {

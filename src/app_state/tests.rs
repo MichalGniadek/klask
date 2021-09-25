@@ -3,6 +3,26 @@ use crate::arg_state::ArgState;
 use clap::{Clap, FromArgMatches, IntoApp};
 use std::fmt::Debug;
 
+#[derive(Debug, Clap, PartialEq, Eq)]
+struct OptionalAndDefault {
+    required: String,
+    optional: Option<String>,
+    #[clap(default_value = "d")]
+    default: String,
+}
+
+#[test]
+fn check_optional_and_default() {
+    test_app(
+        |args| args[0].enter_value("a"),
+        OptionalAndDefault {
+            required: "a".into(),
+            optional: None,
+            default: "d".into(),
+        },
+    );
+}
+
 fn test_app<C, F>(setup: F, expected: C)
 where
     C: IntoApp + FromArgMatches + Debug + Eq,
