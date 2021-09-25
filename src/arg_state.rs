@@ -49,7 +49,7 @@ pub enum ArgKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChooseState(String, Uuid);
+pub struct ChooseState(pub String, pub Uuid);
 
 impl Default for ChooseState {
     fn default() -> Self {
