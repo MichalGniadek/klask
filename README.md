@@ -3,7 +3,7 @@
 [![docs.rs](https://img.shields.io/docsrs/klask?style=for-the-badge)](https://docs.rs/klask)
 
 # Klask
-Allows you to create a gui application automatically from clap (v3). Uses egui for graphics. Currently, requires nightly.
+Allows you to create a gui application automatically from clap (v3). Uses egui for graphics.
 
 ## Features
 - Supports optional fields with and without default values

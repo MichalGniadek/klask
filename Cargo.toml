@@ -2,7 +2,7 @@
 name = "klask"
 version = "0.2.2"
 authors = ["Michał Gniadek <mgniadek@interia.pl>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 description = "Automatically create GUI for clap apps"
 repository = "https://github.com/MichalGniadek/klask"

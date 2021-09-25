@@ -1,6 +1,4 @@
-#![feature(command_access)]
 #![warn(missing_docs)]
-
 //! You can use [`run_app`] for [`App`]s created manually or generated from yaml and
 //! [`run_derived`] for [`App`]s derived from a struct. Both of these functions take
 //! a closure that contains the code that would normally be in `main`. They should be
@@ -25,7 +23,7 @@
 //!     println!("{}", matches.is_present("debug"))
 //! }
 //! ```
-//! Currently requires nightly.
+
 mod app_state;
 mod arg_state;
 mod child_app;
@@ -41,7 +39,6 @@ use eframe::{
 };
 use error::{ExecuteError, ValidationErrorInfo};
 use klask_ui::KlaskUi;
-use std::process::Command;
 
 /// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
@@ -170,15 +167,12 @@ impl epi::App for Klask {
 
 impl Klask {
     fn execute(&mut self) -> Result<ChildApp, ExecuteError> {
-        // Call the same executable, with subcommand equal to inner app's name
-        let mut cmd = Command::new(std::env::current_exe()?);
-        cmd.arg(self.app.get_name());
-        let mut cmd = self.state.set_cmd_args(cmd)?;
+        let args = self.state.get_cmd_args(vec![self.app.get_name().into()])?;
 
         // Check for validation errors
-        self.app.clone().try_get_matches_from(cmd.get_args())?;
+        self.app.clone().try_get_matches_from(args.iter())?;
 
-        ChildApp::run(&mut cmd)
+        ChildApp::run(args)
     }
 
     fn update_output(&mut self, ui: &mut Ui) {
