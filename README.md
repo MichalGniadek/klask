@@ -16,8 +16,8 @@ Unfortunately there are still many edge- (and not so edge-) cases where the comm
 
 Example gui:
 
-![image showcasing the gui](image0.png)
+![image showcasing the gui](media/showcase-2021-09-25.png)
 
-Generated from miniserve's app:
+Generated from [miniserve](https://github.com/svenstaro/miniserve)'s app:
 
-![image showcasing the gui](image1.png)
+![image showcasing the gui](media/miniserve-2021-09-25.png)

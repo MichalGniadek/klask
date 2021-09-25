@@ -36,7 +36,7 @@ use app_state::AppState;
 use child_app::ChildApp;
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, Color32, Ui},
+    egui::{self, Button, Color32, CtxRef, Ui},
     epi,
 };
 use error::{ExecuteError, ValidationErrorInfo};
@@ -119,9 +119,8 @@ impl epi::App for Klask {
         self.app.get_name()
     }
 
-    fn update(&mut self, ctx: &eframe::egui::CtxRef, _frame: &mut epi::Frame<'_>) {
+    fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.style_mut().spacing.text_edit_width = f32::MAX;
             egui::ScrollArea::auto_sized().show(ui, |ui| {
                 self.state.update(ui, &mut self.validation_error);
 
@@ -155,6 +154,13 @@ impl epi::App for Klask {
                 self.update_output(ui);
             });
         });
+    }
+
+    fn setup(&mut self, ctx: &CtxRef, _: &mut epi::Frame<'_>, _: Option<&dyn epi::Storage>) {
+        let mut base_style = (*ctx.style()).clone();
+        base_style.spacing.text_edit_width = f32::MAX;
+        base_style.spacing.item_spacing.y = 8.0;
+        ctx.set_style(base_style);
     }
 
     fn on_exit(&mut self) {

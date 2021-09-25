@@ -40,9 +40,20 @@ pub enum InnerSubcommand {
         #[clap(short, multiple_occurrences(true))]
         multiple_values: Vec<String>,
     },
-    InnerSubcommandB,
+    /// About
+    InnerSubcommandB {
+        #[clap(subcommand)]
+        inner: InnerInnerSubcommand,
+    },
     InnerSubcommandC,
     InnerSubcommandD,
+}
+
+#[derive(Debug, Clap)]
+pub enum InnerInnerSubcommand {
+    /// About 2
+    A,
+    B,
 }
 
 fn main() {

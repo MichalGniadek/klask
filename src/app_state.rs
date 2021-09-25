@@ -1,11 +1,13 @@
 use crate::{arg_state::ArgState, ValidationErrorInfo};
 use clap::App;
-use eframe::egui::Ui;
+use eframe::egui::{Grid, Ui};
 use inflector::Inflector;
 use std::{collections::BTreeMap, process::Command};
+use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
+    id: Uuid,
     about: Option<String>,
     args: Vec<ArgState>,
     subcommands: BTreeMap<String, AppState>,
@@ -26,6 +28,7 @@ impl AppState {
             .collect();
 
         AppState {
+            id: Uuid::new_v4(),
             about: app.get_about().map(String::from),
             args,
             subcommands,
@@ -41,13 +44,25 @@ impl AppState {
             ui.label(about);
         }
 
-        for arg in &mut self.args {
-            arg.update(ui, validation_error);
+        // Even empty grid adds an empty line
+        if !self.args.is_empty() {
+            Grid::new(self.id)
+                .num_columns(2)
+                .striped(true)
+                .show(ui, |ui| {
+                    for arg in &mut self.args {
+                        arg.update(ui, validation_error);
+                        ui.end_row();
+                    }
+                });
         }
 
-        ui.horizontal(|ui| {
-            for name in self.subcommands.keys() {
-                ui.selectable_value(
+        ui.separator();
+
+        // It probably should be changed to wrapping when there are more than a few
+        ui.columns(self.subcommands.len(), |ui| {
+            for (i, name) in self.subcommands.keys().enumerate() {
+                ui[i].selectable_value(
                     &mut self.current,
                     Some(name.clone()),
                     name.to_sentence_case(),
