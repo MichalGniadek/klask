@@ -1,4 +1,4 @@
-use crate::{error::ValidationErrorInfoTrait, KlaskUi, ValidationErrorInfo};
+use crate::{error::ValidationErrorInfoTrait, klask_ui, KlaskUi, ValidationErrorInfo};
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, Ui};
 use inflector::Inflector;
@@ -12,6 +12,7 @@ pub struct ArgState {
     pub desc: Option<String>,
     pub optional: bool,
     pub use_equals: bool,
+    pub forbid_empty: bool,
     pub kind: ArgKind,
 }
 
@@ -107,12 +108,80 @@ impl From<&Arg<'_>> for ArgState {
                 .or_else(|| a.get_about().map(ToString::to_string)),
             optional: !a.is_set(ArgSettings::Required),
             use_equals: a.is_set(ArgSettings::RequireEquals),
+            forbid_empty: a.is_set(ArgSettings::ForbidEmptyValues),
             kind,
         }
     }
 }
 
 impl ArgState {
+    pub fn update_single(
+        ui: &mut Ui,
+        value: &mut String,
+        id: &Uuid,
+        default: &Option<String>,
+        possible: &Vec<String>,
+        value_hint: ValueHint,
+        optional: bool,
+        validation_error: bool,
+    ) {
+        let is_error = (!optional && value.is_empty()) || validation_error;
+
+        let previous = if is_error {
+            let (previous, new) = klask_ui::error_style((**ui.style()).clone());
+            ui.set_style(new);
+            Some(previous)
+        } else {
+            None
+        };
+
+        if possible.is_empty() {
+            ui.horizontal(|ui| {
+                if matches!(
+                    value_hint,
+                    ValueHint::AnyPath | ValueHint::FilePath | ValueHint::ExecutablePath
+                ) && ui.button("Select file...").clicked()
+                {
+                    if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten() {
+                        *value = file.to_string_lossy().into_owned();
+                    }
+                }
+
+                if matches!(value_hint, ValueHint::AnyPath | ValueHint::DirPath)
+                    && ui.button("Select directory...").clicked()
+                {
+                    if let Some(file) = FileDialog::new().show_open_single_dir().ok().flatten() {
+                        *value = file.to_string_lossy().into_owned();
+                    }
+                }
+
+                ui.text_edit_singleline_hint(
+                    value,
+                    match (default, optional) {
+                        (Some(default), _) => default.as_str(),
+                        (_, true) => "(Optional)",
+                        (_, false) => "",
+                    },
+                );
+            });
+        } else {
+            ComboBox::from_id_source(id)
+                .selected_text(&value)
+                .show_ui(ui, |ui| {
+                    if optional {
+                        ui.selectable_value(value, String::new(), "None");
+                    }
+                    for p in possible {
+                        ui.selectable_value(value, p.clone(), p);
+                    }
+                });
+        }
+
+        if let Some(previous) = previous {
+            ui.set_style(previous);
+        }
+    }
+
     pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
         let label = ui.label(&self.name);
 
@@ -120,164 +189,109 @@ impl ArgState {
             label.on_hover_text(desc);
         }
 
-        ui.horizontal(|ui| {
-            // Not needed in edition 2021 with new closure borrowing rules
-            let ArgState {
-                name,
-                optional,
-                kind,
-                ..
-            } = self;
+        // Not needed in edition 2021 with new closure borrowing rules
+        let ArgState {
+            name,
+            optional,
+            forbid_empty,
+            kind,
+            ..
+        } = self;
 
-            match kind {
-                ArgKind::String {
-                    value,
-                    default,
-                    possible,
-                    value_hint,
-                    id,
-                } => {
-                    ui.error_style_if(
-                        (!*optional && value.is_empty()) || validation_error.is(name).is_some(),
-                        |ui| {
-                            if possible.is_empty() {
-                                if matches!(
-                                    value_hint,
-                                    ValueHint::AnyPath
-                                        | ValueHint::FilePath
-                                        | ValueHint::ExecutablePath
-                                ) && ui.button("Select file...").clicked()
-                                {
-                                    if let Some(file) =
-                                        FileDialog::new().show_open_single_file().ok().flatten()
-                                    {
-                                        *value = file.to_string_lossy().into_owned();
-                                    }
-                                }
+        match kind {
+            ArgKind::String {
+                value,
+                default,
+                possible,
+                value_hint,
+                id,
+            } => Self::update_single(
+                ui,
+                value,
+                id,
+                default,
+                possible,
+                *value_hint,
+                *optional && !*forbid_empty,
+                validation_error.is(name).is_some(),
+            ),
+            ArgKind::MultipleStrings {
+                values,
+                default,
+                possible,
+                value_hint,
+            } => {
+                let list = ui.vertical(|ui| {
+                    let mut remove_index = None;
 
-                                if matches!(value_hint, ValueHint::AnyPath | ValueHint::DirPath)
-                                    && ui.button("Select directory...").clicked()
-                                {
-                                    if let Some(file) =
-                                        FileDialog::new().show_open_single_dir().ok().flatten()
-                                    {
-                                        *value = file.to_string_lossy().into_owned();
-                                    }
-                                }
-
-                                let text = ui.text_edit_singleline_hint(
-                                    value,
-                                    match (default, *optional) {
-                                        (Some(default), _) => default.as_str(),
-                                        (_, true) => "(Optional)",
-                                        (_, false) => "",
-                                    },
-                                );
-
-                                if let Some(message) = validation_error.is(name) {
-                                    if text.on_hover_text(message).changed() {
-                                        *validation_error = None;
-                                    }
-                                }
-                            } else {
-                                ComboBox::from_id_source(id)
-                                    .selected_text(value.clone())
-                                    .show_ui(ui, |ui| {
-                                        if *optional {
-                                            ui.selectable_value(value, String::new(), "None");
-                                        }
-                                        for p in possible {
-                                            ui.selectable_value(value, p.clone(), p);
-                                        }
-                                    });
+                    for (index, value) in values.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("-").clicked() {
+                                remove_index = Some(index);
                             }
-                        },
-                    );
-                }
-                ArgKind::Occurences(i) => {
-                    let list = ui.horizontal(|ui| {
-                        if ui.small_button("-").clicked() {
-                            *i = (*i - 1).max(0);
-                        }
 
-                        ui.error_style_if(validation_error.is(name).is_some(), |ui| {
-                            ui.label(i.to_string());
+                            Self::update_single(
+                                ui,
+                                &mut value.0,
+                                &value.1,
+                                &None,
+                                possible,
+                                *value_hint,
+                                !*forbid_empty,
+                                validation_error.is(name).is_some(),
+                            );
                         });
+                    }
 
-                        if ui.small_button("+").clicked() {
-                            *i += 1;
+                    if let Some(index) = remove_index {
+                        values.remove(index);
+                    }
+
+                    ui.horizontal(|ui| {
+                        if ui.button("New value").clicked() {
+                            values.push(Default::default());
+                        }
+                        let text = if default.is_empty() {
+                            "Reset"
+                        } else {
+                            "Reset to default"
+                        };
+                        ui.add_space(20.0);
+                        if ui.button(text).clicked() {
+                            *values = default.clone();
                         }
                     });
+                });
 
-                    if let Some(message) = validation_error.is(name) {
-                        if list.response.on_hover_text(message).changed() {
-                            *validation_error = None;
-                        }
+                if let Some(message) = validation_error.is(name) {
+                    if list.response.on_hover_text(message).changed() {
+                        *validation_error = None;
                     }
                 }
-                ArgKind::MultipleStrings {
-                    values,
-                    default,
-                    possible,
-                    value_hint,
-                } => {
-                    ui.multiple_values(
-                        validation_error,
-                        name,
-                        values,
-                        Some(default),
-                        |ui, value| {
-                            if possible.is_empty() {
-                                if matches!(
-                                    value_hint,
-                                    ValueHint::AnyPath
-                                        | ValueHint::FilePath
-                                        | ValueHint::ExecutablePath
-                                ) && ui.button("Select file...").clicked()
-                                {
-                                    if let Some(file) =
-                                        FileDialog::new().show_open_single_file().ok().flatten()
-                                    {
-                                        value.0 = file.to_string_lossy().into_owned();
-                                    }
-                                }
+            }
+            ArgKind::Occurences(i) => {
+                let list = ui.horizontal(|ui| {
+                    if ui.small_button("-").clicked() {
+                        *i = (*i - 1).max(0);
+                    }
 
-                                if matches!(value_hint, ValueHint::AnyPath | ValueHint::DirPath)
-                                    && ui.button("Select directory...").clicked()
-                                {
-                                    if let Some(file) =
-                                        FileDialog::new().show_open_single_dir().ok().flatten()
-                                    {
-                                        value.0 = file.to_string_lossy().into_owned();
-                                    }
-                                }
+                    ui.label(i.to_string());
 
-                                ui.text_edit_singleline(&mut value.0);
-                            } else {
-                                let possible = possible.clone();
-                                ComboBox::from_id_source(value.1)
-                                    .selected_text(value.0.clone())
-                                    .show_ui(ui, |ui| {
-                                        if *optional {
-                                            ui.selectable_value(
-                                                &mut value.0,
-                                                String::new(),
-                                                "None",
-                                            );
-                                        }
-                                        for s in possible {
-                                            ui.selectable_value(&mut value.0, s.clone(), s);
-                                        }
-                                    });
-                            }
-                        },
-                    );
+                    if ui.small_button("+").clicked() {
+                        *i += 1;
+                    }
+                });
+
+                if let Some(message) = validation_error.is(name) {
+                    if list.response.on_hover_text(message).changed() {
+                        *validation_error = None;
+                    }
                 }
-                ArgKind::Bool(bool) => {
-                    ui.checkbox(bool, "");
-                }
-            };
-        });
+            }
+            ArgKind::Bool(bool) => {
+                ui.checkbox(bool, "");
+            }
+        };
     }
 
     pub fn get_cmd_args(&self, mut args: Vec<String>) -> Result<Vec<String>, String> {
