@@ -191,7 +191,7 @@ impl ArgState {
                 value_hint,
                 ..
             } => {
-                let forbid_entry = self.forbid_empty;
+                let forbid_empty = self.forbid_empty;
                 let list = ui.vertical(|ui| {
                     let mut remove_index = None;
 
@@ -207,7 +207,7 @@ impl ArgState {
                                 &None,
                                 possible,
                                 *value_hint,
-                                !forbid_entry,
+                                !forbid_empty,
                                 is_validation_error,
                             );
                         });
