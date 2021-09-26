@@ -59,8 +59,10 @@ struct UseEquals {
     path: PathBuf,
     #[clap(long, require_equals = true, possible_values = &["P", "O"])]
     choose: String,
+    #[clap(long, require_equals = true)]
+    multiple_enter_one: Vec<String>,
     #[clap(long, require_equals = true, multiple_occurrences = true)]
-    multiple: Vec<String>,
+    multiple_occurrences: Vec<String>,
     #[clap(long, parse(from_occurrences))]
     occurrences: i32,
     #[clap(long)]
@@ -72,20 +74,39 @@ fn use_equals() {
     test_app(
         |args| {
             enter_consecutive(args, ["a", "b", "c", "P"]);
-            args[4].enter_multiple(["d", "e"]);
-            args[5].occurrences(3);
-            args[6].set();
+            args[4].enter_multiple(["d"]);
+            args[5].enter_multiple(["e", "f"]);
+            args[6].occurrences(3);
+            args[7].set();
         },
         UseEquals {
             long: "a".into(),
             short: "b".into(),
             path: "c".into(),
             choose: "P".into(),
-            multiple: vec!["d".into(), "e".into()],
+            multiple_enter_one: vec!["d".into()],
+            multiple_occurrences: vec!["e".into(), "f".into()],
             occurrences: 3,
             flag: true,
         },
     );
+}
+
+#[derive(Debug, Clap, PartialEq, Eq)]
+struct PanicUseEqualsPassMultipleValues {
+    #[clap(long, require_equals = true)]
+    multiple: Vec<String>,
+}
+
+#[test]
+#[should_panic]
+fn panic_use_equals_pass_multiple_values() {
+    test_app(
+        |args| args[0].enter_multiple(["a", "b"]),
+        PanicUseEqualsPassMultipleValues {
+            multiple: vec!["a".into(), "b".into()],
+        },
+    )
 }
 
 fn test_app<C, F>(setup: F, expected: C)

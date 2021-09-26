@@ -28,6 +28,7 @@ pub enum ArgKind {
         values: Vec<(String, Uuid)>,
         default: Vec<String>,
         possible: Vec<String>,
+        multiple_values: bool,
         value_hint: ValueHint,
     },
     Occurences(i32),
@@ -49,11 +50,14 @@ impl From<&Arg<'_>> for ArgState {
                 .map(|s| s.to_string())
                 .collect();
 
-            if a.is_set(ArgSettings::MultipleOccurrences) {
+            let multiple_values = a.is_set(ArgSettings::MultipleValues);
+
+            if a.is_set(ArgSettings::MultipleOccurrences) | multiple_values {
                 ArgKind::MultipleStrings {
                     values: vec![],
                     default: default.collect(),
                     possible,
+                    multiple_values,
                     value_hint: a.get_value_hint(),
                 }
             } else {
@@ -177,6 +181,7 @@ impl ArgState {
                 default,
                 possible,
                 value_hint,
+                ..
             } => {
                 let forbid_entry = self.forbid_empty;
                 let list = ui.vertical(|ui| {
@@ -269,6 +274,41 @@ impl ArgState {
                     return Err(format!("{} is required.", self.name));
                 }
             }
+            ArgKind::MultipleStrings {
+                values,
+                multiple_values,
+                ..
+            } => {
+                if let Some(call_name) = &self.call_name {
+                    // TODO: No multiple occurences but multiple values
+                    if self.use_equals
+                        && *multiple_values
+                        && (/*TODO: delimeter*/false || values.len() == 1)
+                    {
+                        args.push(format!(
+                            "{}={}",
+                            call_name,
+                            &values
+                                .iter()
+                                .map(|(s, _)| format!(" {}", s))
+                                .collect::<String>()[1..]
+                        ))
+                    } else {
+                        // TODO: No multiple occurences but multiple values
+                        for value in values {
+                            if self.use_equals {
+                                args.push(format!("{}={}", call_name, value.0));
+                            } else {
+                                args.extend_from_slice(&[call_name.clone(), value.0.clone()]);
+                            }
+                        }
+                    }
+                } else {
+                    for value in values {
+                        args.push(value.0.clone());
+                    }
+                }
+            }
             &ArgKind::Occurences(i) => {
                 for _ in 0..i {
                     args.push(
@@ -285,19 +325,6 @@ impl ArgState {
                             .clone()
                             .ok_or_else(|| "Internal error.".to_string())?,
                     );
-                }
-            }
-            ArgKind::MultipleStrings { values, .. } => {
-                for value in values {
-                    if let Some(call_name) = self.call_name.as_ref() {
-                        if self.use_equals {
-                            args.push(format!("{}={}", call_name, value.0));
-                        } else {
-                            args.extend_from_slice(&[call_name.clone(), value.0.clone()]);
-                        }
-                    } else {
-                        args.push(value.0.clone());
-                    }
                 }
             }
         }
