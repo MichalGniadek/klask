@@ -6,13 +6,32 @@ edition = "2018"
 license = "MIT"
 description = "Automatically create GUI for clap apps"
 repository = "https://github.com/MichalGniadek/klask"
+categories = ["gui"]
+keywords = ["clap", "gui", "ui", "cli", "egui"]
 
 [dependencies]
-Inflector = "0.11.4"
+Inflector = { version = "0.11.4", default-features = false }
+clap = { version = "3.0.0-beta.4", default-features = false, features = [
+    "std",
+] }
+uuid = { version = "0.8.2", features = ["v4"] }
 cansi = "2.1.1"
-clap = "3.0.0-beta.4"
 eframe = "0.14.0"
 linkify = "0.7"
-native-dialog = "0.5.5"
 thiserror = "1.0.29"
-uuid = { version = "0.8.2", features = ["v4"] }
+
+[dev-dependencies]
+clap = { version = "3.0.0-beta.4", default-features = false, features = [
+    "std",
+    "derive",
+] }
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+native-dialog = "0.5.5"
+
+# Should make dialogs look better
+[target.'cfg(target_os = "windows")'.dependencies]
+native-dialog = { version = "0.5.5", features = [
+    "windows_dpi_awareness",
+    "windows_visual_styles",
+] }
