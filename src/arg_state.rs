@@ -30,6 +30,8 @@ pub enum ArgKind {
         possible: Vec<String>,
         multiple_values: bool,
         multiple_occurrences: bool,
+        use_delimiter: bool,
+        req_delimiter: bool,
         value_hint: ValueHint,
     },
     Occurences(i32),
@@ -61,6 +63,9 @@ impl From<&Arg<'_>> for ArgState {
                     possible,
                     multiple_values,
                     multiple_occurrences,
+                    use_delimiter: a.is_set(ArgSettings::UseValueDelimiter)
+                        | a.is_set(ArgSettings::RequireDelimiter),
+                    req_delimiter: a.is_set(ArgSettings::RequireDelimiter),
                     value_hint: a.get_value_hint(),
                 }
             } else {
@@ -281,10 +286,12 @@ impl ArgState {
                 values,
                 multiple_values,
                 multiple_occurrences,
+                use_delimiter,
+                req_delimiter,
                 ..
             } => {
                 if let Some(call_name) = &self.call_name {
-                    let single = /*TODO: delimeter*/false || values.len() == 1;
+                    let single = *use_delimiter || values.len() == 1;
                     match (
                         self.use_equals,
                         *multiple_values,
@@ -297,15 +304,25 @@ impl ArgState {
                                 call_name,
                                 &values
                                     .iter()
-                                    .map(|(s, _)| format!(" {}", s))
+                                    .map(|(s, _)| format!(",{}", s))
                                     .collect::<String>()[1..]
                             ));
                         }
                         (false, true, _, _) => {
                             args.push(call_name.clone());
 
-                            for value in values {
-                                args.push(value.0.clone());
+                            if *req_delimiter {
+                                args.push(
+                                    (&values
+                                        .iter()
+                                        .map(|(s, _)| format!(",{}", s))
+                                        .collect::<String>()[1..])
+                                        .to_string(),
+                                );
+                            } else {
+                                for value in values {
+                                    args.push(value.0.clone());
+                                }
                             }
                         }
                         (true, _, true, _) => {

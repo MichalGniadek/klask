@@ -119,7 +119,19 @@ struct DifferentMultipleValues {
     multiple_occurrences: Vec<String>,
     #[clap(long)]
     multiple: Vec<String>,
-    // TODO: delimeter
+    #[clap(long, require_equals = true, use_delimiter = true)]
+    multiple_equals_use_delim: Vec<String>,
+    #[clap(
+        long,
+        require_equals = true,
+        use_delimiter = true,
+        require_delimiter = true
+    )]
+    multiple_equals_req_delim: Vec<String>,
+    #[clap(long, use_delimiter = true)]
+    multiple_use_delim: Vec<String>,
+    #[clap(long, use_delimiter = true, require_delimiter = true)]
+    multiple_req_delim: Vec<String>,
 }
 
 #[test]
@@ -130,12 +142,20 @@ fn different_multiple_values() {
             args[1].enter_multiple(["b", "c"]);
             args[2].enter_multiple(["d", "e"]);
             args[3].enter_multiple(["f", "g"]);
+            args[4].enter_multiple(["h", "i"]);
+            args[5].enter_multiple(["j", "k"]);
+            args[6].enter_multiple(["l", "m"]);
+            args[7].enter_multiple(["n", "o"]);
         },
         DifferentMultipleValues {
             multiple_equals_enter_one: vec!["a".into()],
             multiple_occurrences_equals: vec!["b".into(), "c".into()],
             multiple_occurrences: vec!["d".into(), "e".into()],
             multiple: vec!["f".into(), "g".into()],
+            multiple_equals_use_delim: vec!["h".into(), "i".into()],
+            multiple_equals_req_delim: vec!["j".into(), "k".into()],
+            multiple_use_delim: vec!["l".into(), "m".into()],
+            multiple_req_delim: vec!["n".into(), "o".into()],
         },
     )
 }
