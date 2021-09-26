@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
+    branches:
+      - master
     paths-ignore:
       - '**.md'
   pull_request:
+    branches:
+      - master
     paths-ignore:
       - '**.md'
   workflow_dispatch:
@@ -14,6 +18,8 @@ jobs:
     name: Run tests
     runs-on: ubuntu-latest
     steps:
+      - name: Install for egui
+        run: sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
       - name: Checkout
         uses: actions/checkout@v2
       - name: Install toolchain
