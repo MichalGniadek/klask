@@ -22,7 +22,7 @@ jobs:
           profile: minimal
           toolchain: stable
       - name: Cache
-        uses: Swatinem/rust-chache@v1
+        uses: Swatinem/rust-cache@v1
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
@@ -40,7 +40,7 @@ jobs:
           toolchain: stable
           components: rustfmt
       - name: Cache
-        uses: Swatinem/rust-chache@v1
+        uses: Swatinem/rust-cache@v1
       - name: Rust fmt
         uses: actions-rs/cargo@v1
         with:
@@ -59,7 +59,7 @@ jobs:
           toolchain: nightly
           components: clippy
       - name: Cache
-        uses: Swatinem/rust-chache@v1
+        uses: Swatinem/rust-cache@v1
       - name: Clippy
         uses: actions-rs/clippy-check@v1
         with:
