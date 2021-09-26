@@ -96,7 +96,6 @@ where
     run_app(C::into_app(), |m| {
         let matches = C::from_arg_matches(m)
             .expect("Internal error, C::from_arg_matches should always succeed");
-
         f(matches);
     });
 }
