@@ -132,6 +132,12 @@ struct DifferentMultipleValues {
     multiple_use_delim: Vec<String>,
     #[clap(long, use_delimiter = true, require_delimiter = true)]
     multiple_req_delim: Vec<String>,
+    #[clap(long)]
+    multiple_none_entered: Vec<String>,
+    #[clap(long, require_equals = true)]
+    multiple_equals_none_entered: Vec<String>,
+    #[clap(long, use_delimiter = true)]
+    multiple_req_delim_none_entered: Vec<String>,
 }
 
 #[test]
@@ -156,6 +162,9 @@ fn different_multiple_values() {
             multiple_equals_req_delim: vec!["j".into(), "k".into()],
             multiple_use_delim: vec!["l".into(), "m".into()],
             multiple_req_delim: vec!["n".into(), "o".into()],
+            multiple_none_entered: vec![],
+            multiple_equals_none_entered: vec![],
+            multiple_req_delim_none_entered: vec![],
         },
     )
 }

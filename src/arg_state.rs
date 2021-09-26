@@ -290,59 +290,61 @@ impl ArgState {
                 req_delimiter,
                 ..
             } => {
-                if let Some(call_name) = &self.call_name {
-                    let single = *use_delimiter || values.len() == 1;
-                    match (
-                        self.use_equals,
-                        *multiple_values,
-                        *multiple_occurrences,
-                        single,
-                    ) {
-                        (true, true, _, true) => {
-                            args.push(format!(
-                                "{}={}",
-                                call_name,
-                                &values
-                                    .iter()
-                                    .map(|(s, _)| format!(",{}", s))
-                                    .collect::<String>()[1..]
-                            ));
-                        }
-                        (false, true, _, _) => {
-                            args.push(call_name.clone());
-
-                            if *req_delimiter {
-                                args.push(
-                                    (&values
+                if !values.is_empty() {
+                    if let Some(call_name) = &self.call_name {
+                        let single = *use_delimiter || values.len() == 1;
+                        match (
+                            self.use_equals,
+                            *multiple_values,
+                            *multiple_occurrences,
+                            single,
+                        ) {
+                            (true, true, _, true) => {
+                                args.push(format!(
+                                    "{}={}",
+                                    call_name,
+                                    &values
                                         .iter()
                                         .map(|(s, _)| format!(",{}", s))
-                                        .collect::<String>()[1..])
-                                        .to_string(),
-                                );
-                            } else {
-                                for value in values {
-                                    args.push(value.0.clone());
+                                        .collect::<String>()[1..]
+                                ));
+                            }
+                            (false, true, _, _) => {
+                                args.push(call_name.clone());
+
+                                if *req_delimiter {
+                                    args.push(
+                                        (&values
+                                            .iter()
+                                            .map(|(s, _)| format!(",{}", s))
+                                            .collect::<String>()[1..])
+                                            .to_string(),
+                                    );
+                                } else {
+                                    for value in values {
+                                        args.push(value.0.clone());
+                                    }
                                 }
                             }
-                        }
-                        (true, _, true, _) => {
-                            for value in values {
-                                args.push(format!("{}={}", call_name, value.0));
+                            (true, _, true, _) => {
+                                for value in values {
+                                    args.push(format!("{}={}", call_name, value.0));
+                                }
                             }
-                        }
-                        (false, _, true, _) => {
-                            for value in values {
-                                args.extend_from_slice(&[call_name.clone(), value.0.clone()]);
+                            (false, _, true, _) => {
+                                for value in values {
+                                    args.extend_from_slice(&[call_name.clone(), value.0.clone()]);
+                                }
                             }
+                            (_, false, false, _) => unreachable!(
+                                "Either multiple_values or multiple_occurrences must be true"
+                            ),
+                            (true, true, false, false) => return Err("Can't be represented".into()),
                         }
-                        (_, false, false, _) => unreachable!(
-                            "Either multiple_values or multiple_occurrences must be true"
-                        ),
-                        (true, true, false, false) => return Err("Can't be represented".into()),
-                    }
-                } else {
-                    for value in values {
-                        args.push(value.0.clone());
+                    } else {
+                        for value in values {
+                            args.push(value.0.clone());
+                        }
                     }
                 }
             }
