@@ -100,7 +100,7 @@ where
 impl crate::arg_state::ArgState {
     fn enter_value(&mut self, val: &str) {
         match &mut self.kind {
-            ArgKind::String { value, .. } => *value = val.to_string(),
+            ArgKind::String { value, .. } => value.0 = val.to_string(),
             _ => panic!("Called enter_value on {:?}", self),
         }
     }

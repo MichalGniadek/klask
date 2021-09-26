@@ -19,15 +19,14 @@ pub struct ArgState {
 #[derive(Debug, Clone)]
 pub enum ArgKind {
     String {
-        value: String,
+        value: ChooseState,
         default: Option<String>,
         possible: Vec<String>,
         value_hint: ValueHint,
-        id: Uuid,
     },
     MultipleStrings {
         values: Vec<ChooseState>,
-        default: Vec<ChooseState>,
+        default: Vec<String>,
         possible: Vec<String>,
         value_hint: ValueHint,
     },
@@ -44,9 +43,9 @@ impl Default for ChooseState {
     }
 }
 
-impl From<String> for ChooseState {
-    fn from(s: String) -> Self {
-        ChooseState(s, Uuid::new_v4())
+impl<S: ToString> From<S> for ChooseState {
+    fn from(s: S) -> Self {
+        ChooseState(s.to_string(), Uuid::new_v4())
     }
 }
 
@@ -58,42 +57,38 @@ impl From<ChooseState> for String {
 
 impl From<&Arg<'_>> for ArgState {
     fn from(a: &Arg) -> Self {
-        let kind = match (
-            a.is_set(ArgSettings::MultipleOccurrences),
-            a.is_set(ArgSettings::TakesValue),
-        ) {
-            (true, true) => ArgKind::MultipleStrings {
-                values: vec![],
-                default: a
-                    .get_default_values()
-                    .iter()
-                    .map(|s| s.to_string_lossy().into_owned().into())
-                    .collect(),
-                possible: a
-                    .get_possible_values()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                value_hint: a.get_value_hint(),
-            },
-            (false, true) => ArgKind::String {
-                value: "".into(),
-                default: a
-                    .get_default_values()
-                    .first()
-                    .map(|s| s.to_string_lossy().into_owned()),
-                possible: a
-                    .get_possible_values()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-                value_hint: a.get_value_hint(),
-                id: Uuid::new_v4(),
-            },
-            (true, false) => ArgKind::Occurences(0),
-            (false, false) => ArgKind::Bool(false),
+        let kind = if a.is_set(ArgSettings::TakesValue) {
+            let mut default = a
+                .get_default_values()
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned());
+
+            let possible = a
+                .get_possible_values()
+                .unwrap_or_default()
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+
+            if a.is_set(ArgSettings::MultipleOccurrences) {
+                ArgKind::MultipleStrings {
+                    values: vec![],
+                    default: default.collect(),
+                    possible,
+                    value_hint: a.get_value_hint(),
+                }
+            } else {
+                ArgKind::String {
+                    value: "".into(),
+                    default: default.next(),
+                    possible,
+                    value_hint: a.get_value_hint(),
+                }
+            }
+        } else if a.is_set(ArgSettings::MultipleOccurrences) {
+            ArgKind::Occurences(0)
+        } else {
+            ArgKind::Bool(false)
         };
 
         Self {
@@ -117,23 +112,15 @@ impl From<&Arg<'_>> for ArgState {
 impl ArgState {
     pub fn update_single(
         ui: &mut Ui,
-        value: &mut String,
-        id: &Uuid,
+        ChooseState(value, id): &mut ChooseState,
         default: &Option<String>,
-        possible: &Vec<String>,
+        possible: &[String],
         value_hint: ValueHint,
         optional: bool,
         validation_error: bool,
     ) {
         let is_error = (!optional && value.is_empty()) || validation_error;
-
-        let previous = if is_error {
-            let (previous, new) = klask_ui::error_style((**ui.style()).clone());
-            ui.set_style(new);
-            Some(previous)
-        } else {
-            None
-        };
+        let previous_style = is_error.then(|| klask_ui::set_error_style(ui));
 
         if possible.is_empty() {
             ui.horizontal(|ui| {
@@ -177,7 +164,7 @@ impl ArgState {
                 });
         }
 
-        if let Some(previous) = previous {
+        if let Some(previous) = previous_style {
             ui.set_style(previous);
         }
     }
@@ -189,31 +176,22 @@ impl ArgState {
             label.on_hover_text(desc);
         }
 
-        // Not needed in edition 2021 with new closure borrowing rules
-        let ArgState {
-            name,
-            optional,
-            forbid_empty,
-            kind,
-            ..
-        } = self;
+        let is_validation_error = validation_error.is(&self.name).is_some();
 
-        match kind {
+        match &mut self.kind {
             ArgKind::String {
                 value,
                 default,
                 possible,
                 value_hint,
-                id,
             } => Self::update_single(
                 ui,
                 value,
-                id,
                 default,
                 possible,
                 *value_hint,
-                *optional && !*forbid_empty,
-                validation_error.is(name).is_some(),
+                self.optional && !self.forbid_empty,
+                is_validation_error,
             ),
             ArgKind::MultipleStrings {
                 values,
@@ -221,6 +199,7 @@ impl ArgState {
                 possible,
                 value_hint,
             } => {
+                let forbid_entry = self.forbid_empty;
                 let list = ui.vertical(|ui| {
                     let mut remove_index = None;
 
@@ -232,13 +211,12 @@ impl ArgState {
 
                             Self::update_single(
                                 ui,
-                                &mut value.0,
-                                &value.1,
+                                value,
                                 &None,
                                 possible,
                                 *value_hint,
-                                !*forbid_empty,
-                                validation_error.is(name).is_some(),
+                                !forbid_entry,
+                                is_validation_error,
                             );
                         });
                     }
@@ -251,26 +229,28 @@ impl ArgState {
                         if ui.button("New value").clicked() {
                             values.push(Default::default());
                         }
+
                         let text = if default.is_empty() {
                             "Reset"
                         } else {
                             "Reset to default"
                         };
+
                         ui.add_space(20.0);
                         if ui.button(text).clicked() {
-                            *values = default.clone();
+                            *values = default.iter().map(|s| s.into()).collect();
                         }
                     });
                 });
 
-                if let Some(message) = validation_error.is(name) {
+                if let Some(message) = validation_error.is(&self.name) {
                     if list.response.on_hover_text(message).changed() {
                         *validation_error = None;
                     }
                 }
             }
             ArgKind::Occurences(i) => {
-                let list = ui.horizontal(|ui| {
+                ui.horizontal(|ui| {
                     if ui.small_button("-").clicked() {
                         *i = (*i - 1).max(0);
                     }
@@ -281,12 +261,6 @@ impl ArgState {
                         *i += 1;
                     }
                 });
-
-                if let Some(message) = validation_error.is(name) {
-                    if list.response.on_hover_text(message).changed() {
-                        *validation_error = None;
-                    }
-                }
             }
             ArgKind::Bool(bool) => {
                 ui.checkbox(bool, "");
@@ -296,7 +270,10 @@ impl ArgState {
 
     pub fn get_cmd_args(&self, mut args: Vec<String>) -> Result<Vec<String>, String> {
         match &self.kind {
-            ArgKind::String { value, .. } => {
+            ArgKind::String {
+                value: ChooseState(value, _),
+                ..
+            } => {
                 if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
                         if self.use_equals {

@@ -2,8 +2,9 @@ use cansi::{CategorisedSlice, Color};
 use eframe::egui::{Color32, Label, Response, Style, TextEdit, Ui};
 use linkify::{LinkFinder, LinkKind};
 
-pub fn error_style(base: Style) -> (Style, Style) {
-    let mut style = base.clone();
+pub fn set_error_style(ui: &mut Ui) -> Style {
+    let previous = (**ui.style()).clone();
+    let style = ui.style_mut();
     style.visuals.widgets.inactive.bg_stroke.color = Color32::RED;
     style.visuals.widgets.inactive.bg_stroke.width = 1.0;
     style.visuals.widgets.hovered.bg_stroke.color = Color32::RED;
@@ -11,7 +12,7 @@ pub fn error_style(base: Style) -> (Style, Style) {
     style.visuals.widgets.open.bg_stroke.color = Color32::RED;
     style.visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
     style.visuals.selection.stroke.color = Color32::RED;
-    (base, style)
+    previous
 }
 
 pub trait KlaskUi {
