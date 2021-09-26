@@ -25,7 +25,7 @@ fn simple() {
     test_app(
         |args| {
             args[0].enter("a");
-            args[2].enter("basdasd");
+            args[2].enter("b");
             args[3].set();
             args[5].occurrences(3);
         },

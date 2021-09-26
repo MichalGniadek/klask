@@ -295,7 +295,7 @@ impl ArgState {
                         let single = *use_delimiter || values.len() == 1;
                         match (
                             self.use_equals,
-                            *multiple_values,
+                            (*multiple_values || false),
                             *multiple_occurrences,
                             single,
                         ) {
