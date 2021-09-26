@@ -1,50 +1,26 @@
-use crate::error::{ValidationErrorInfo, ValidationErrorInfoTrait};
 use cansi::{CategorisedSlice, Color};
-use eframe::egui::{Color32, Label, Response, TextEdit, Ui};
+use eframe::egui::{Color32, Label, Response, Style, TextEdit, Ui};
 use linkify::{LinkFinder, LinkKind};
 
+pub fn set_error_style(ui: &mut Ui) -> Style {
+    let previous = (**ui.style()).clone();
+    let style = ui.style_mut();
+    style.visuals.widgets.inactive.bg_stroke.color = Color32::RED;
+    style.visuals.widgets.inactive.bg_stroke.width = 1.0;
+    style.visuals.widgets.hovered.bg_stroke.color = Color32::RED;
+    style.visuals.widgets.active.bg_stroke.color = Color32::RED;
+    style.visuals.widgets.open.bg_stroke.color = Color32::RED;
+    style.visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
+    style.visuals.selection.stroke.color = Color32::RED;
+    previous
+}
+
 pub trait KlaskUi {
-    fn error_style_if<F: FnOnce(&mut Ui) -> R, R>(&mut self, error: bool, f: F) -> R;
     fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response;
     fn ansi_label(&mut self, text: &str);
-    fn multiple_values<T, F>(
-        &mut self,
-        validation_error: &mut Option<ValidationErrorInfo>,
-        name: &str,
-        values: &mut Vec<T>,
-        default: Option<&mut Vec<T>>,
-        f: F,
-    ) where
-        T: Clone + Default,
-        F: FnMut(&mut Ui, &mut T) -> Response;
 }
 
 impl KlaskUi for Ui {
-    fn error_style_if<F: FnOnce(&mut Ui) -> R, R>(&mut self, is_error: bool, f: F) -> R {
-        let previous = if is_error {
-            let visuals = &mut self.style_mut().visuals;
-            let previous = visuals.clone();
-            visuals.widgets.inactive.bg_stroke.color = Color32::RED;
-            visuals.widgets.inactive.bg_stroke.width = 1.0;
-            visuals.widgets.hovered.bg_stroke.color = Color32::RED;
-            visuals.widgets.active.bg_stroke.color = Color32::RED;
-            visuals.widgets.open.bg_stroke.color = Color32::RED;
-            visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
-            visuals.selection.stroke.color = Color32::RED;
-            Some(previous)
-        } else {
-            None
-        };
-
-        let ret = f(self);
-
-        if let Some(previous) = previous {
-            self.style_mut().visuals = previous;
-        }
-
-        ret
-    }
-
     fn text_edit_singleline_hint(&mut self, text: &mut String, hint: impl ToString) -> Response {
         self.add(TextEdit::singleline(text).hint_text(hint))
     }
@@ -96,61 +72,6 @@ impl KlaskUi for Ui {
                         self.add(label)
                     }
                 };
-            }
-        }
-    }
-
-    fn multiple_values<T, F>(
-        &mut self,
-        validation_error: &mut Option<ValidationErrorInfo>,
-        name: &str,
-        values: &mut Vec<T>,
-        default: Option<&mut Vec<T>>,
-        mut f: F,
-    ) where
-        T: Clone + Default,
-        F: FnMut(&mut Ui, &mut T) -> Response,
-    {
-        let list = self.vertical(|ui| {
-            ui.error_style_if(validation_error.is(name).is_some(), |ui| {
-                let mut remove_index = None;
-
-                for (index, value) in values.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        if ui.small_button("-").clicked() {
-                            remove_index = Some(index);
-                        }
-
-                        f(ui, value);
-                    });
-                }
-
-                if let Some(index) = remove_index {
-                    values.remove(index);
-                }
-
-                ui.horizontal(|ui| {
-                    if ui.button("New value").clicked() {
-                        values.push(T::default());
-                    }
-                    if let Some(default) = default {
-                        let text = if default.is_empty() {
-                            "Reset"
-                        } else {
-                            "Reset to default"
-                        };
-                        ui.add_space(20.0);
-                        if ui.button(text).clicked() {
-                            *values = default.clone();
-                        }
-                    }
-                });
-            })
-        });
-
-        if let Some(message) = validation_error.is(name) {
-            if list.response.on_hover_text(message).changed() {
-                *validation_error = None;
             }
         }
     }
