@@ -5,6 +5,42 @@ use std::{fmt::Debug, path::PathBuf};
 use uuid::Uuid;
 
 #[derive(Debug, Clap, PartialEq, Eq)]
+struct Simple {
+    #[clap(long)]
+    single: String,
+    #[clap(long)]
+    optional_no_enter: Option<String>,
+    #[clap(long)]
+    optional_enter: Option<String>,
+    #[clap(long)]
+    flag_true: bool,
+    #[clap(long)]
+    flag_false: bool,
+    #[clap(long, parse(from_occurrences))]
+    occurrences: i32,
+}
+
+#[test]
+fn simple() {
+    test_app(
+        |args| {
+            args[0].enter("a");
+            args[2].enter("b");
+            args[3].set();
+            args[5].occurrences(3);
+        },
+        Simple {
+            single: "a".into(),
+            optional_no_enter: None,
+            optional_enter: Some("b".into()),
+            flag_true: true,
+            flag_false: false,
+            occurrences: 3,
+        },
+    )
+}
+
+#[derive(Debug, Clap, PartialEq, Eq)]
 struct ForbidEmpty {
     #[clap(long, forbid_empty_values = true)]
     optional_no_empty1: Option<String>,
