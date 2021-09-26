@@ -2,6 +2,7 @@ use super::AppState;
 use crate::arg_state::{ArgKind, ArgState};
 use clap::{Clap, FromArgMatches, IntoApp, ValueHint};
 use std::{fmt::Debug, path::PathBuf};
+use uuid::Uuid;
 
 #[derive(Debug, Clap, PartialEq, Eq)]
 struct ForbidEmpty {
@@ -108,7 +109,10 @@ impl crate::arg_state::ArgState {
     fn enter_values(&mut self, vals: &[&str]) {
         match &mut self.kind {
             ArgKind::MultipleStrings { values, .. } => {
-                *values = vals.iter().map(|s| s.to_string().into()).collect()
+                *values = vals
+                    .iter()
+                    .map(|s| (s.to_string(), Uuid::new_v4()))
+                    .collect()
             }
             _ => panic!("Called enter_value on {:?}", self),
         }

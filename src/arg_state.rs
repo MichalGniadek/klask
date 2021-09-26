@@ -19,40 +19,19 @@ pub struct ArgState {
 #[derive(Debug, Clone)]
 pub enum ArgKind {
     String {
-        value: ChooseState,
+        value: (String, Uuid),
         default: Option<String>,
         possible: Vec<String>,
         value_hint: ValueHint,
     },
     MultipleStrings {
-        values: Vec<ChooseState>,
+        values: Vec<(String, Uuid)>,
         default: Vec<String>,
         possible: Vec<String>,
         value_hint: ValueHint,
     },
     Occurences(i32),
     Bool(bool),
-}
-
-#[derive(Debug, Clone)]
-pub struct ChooseState(pub String, pub Uuid);
-
-impl Default for ChooseState {
-    fn default() -> Self {
-        Self(Default::default(), Uuid::new_v4())
-    }
-}
-
-impl<S: ToString> From<S> for ChooseState {
-    fn from(s: S) -> Self {
-        ChooseState(s.to_string(), Uuid::new_v4())
-    }
-}
-
-impl From<ChooseState> for String {
-    fn from(s: ChooseState) -> Self {
-        s.0
-    }
 }
 
 impl From<&Arg<'_>> for ArgState {
@@ -79,7 +58,7 @@ impl From<&Arg<'_>> for ArgState {
                 }
             } else {
                 ArgKind::String {
-                    value: "".into(),
+                    value: ("".to_string(), Uuid::new_v4()),
                     default: default.next(),
                     possible,
                     value_hint: a.get_value_hint(),
@@ -112,7 +91,7 @@ impl From<&Arg<'_>> for ArgState {
 impl ArgState {
     pub fn update_single(
         ui: &mut Ui,
-        ChooseState(value, id): &mut ChooseState,
+        (value, id): &mut (String, Uuid),
         default: &Option<String>,
         possible: &[String],
         value_hint: ValueHint,
@@ -227,7 +206,7 @@ impl ArgState {
 
                     ui.horizontal(|ui| {
                         if ui.button("New value").clicked() {
-                            values.push(Default::default());
+                            values.push(("".into(), Uuid::new_v4()));
                         }
 
                         let text = if default.is_empty() {
@@ -238,7 +217,10 @@ impl ArgState {
 
                         ui.add_space(20.0);
                         if ui.button(text).clicked() {
-                            *values = default.iter().map(|s| s.into()).collect();
+                            *values = default
+                                .iter()
+                                .map(|s| (s.to_string(), Uuid::new_v4()))
+                                .collect();
                         }
                     });
                 });
@@ -271,8 +253,7 @@ impl ArgState {
     pub fn get_cmd_args(&self, mut args: Vec<String>) -> Result<Vec<String>, String> {
         match &self.kind {
             ArgKind::String {
-                value: ChooseState(value, _),
-                ..
+                value: (value, _), ..
             } => {
                 if !value.is_empty() {
                     if let Some(call_name) = self.call_name.as_ref() {
