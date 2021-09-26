@@ -29,6 +29,7 @@ pub enum ArgKind {
         default: Vec<String>,
         possible: Vec<String>,
         multiple_values: bool,
+        multiple_occurrences: bool,
         value_hint: ValueHint,
     },
     Occurences(i32),
@@ -51,13 +52,15 @@ impl From<&Arg<'_>> for ArgState {
                 .collect();
 
             let multiple_values = a.is_set(ArgSettings::MultipleValues);
+            let multiple_occurrences = a.is_set(ArgSettings::MultipleOccurrences);
 
-            if a.is_set(ArgSettings::MultipleOccurrences) | multiple_values {
+            if multiple_occurrences | multiple_values {
                 ArgKind::MultipleStrings {
                     values: vec![],
                     default: default.collect(),
                     possible,
                     multiple_values,
+                    multiple_occurrences,
                     value_hint: a.get_value_hint(),
                 }
             } else {
@@ -277,31 +280,48 @@ impl ArgState {
             ArgKind::MultipleStrings {
                 values,
                 multiple_values,
+                multiple_occurrences,
                 ..
             } => {
                 if let Some(call_name) = &self.call_name {
-                    // TODO: No multiple occurences but multiple values
-                    if self.use_equals
-                        && *multiple_values
-                        && (/*TODO: delimeter*/false || values.len() == 1)
-                    {
-                        args.push(format!(
-                            "{}={}",
-                            call_name,
-                            &values
-                                .iter()
-                                .map(|(s, _)| format!(" {}", s))
-                                .collect::<String>()[1..]
-                        ))
-                    } else {
-                        // TODO: No multiple occurences but multiple values
-                        for value in values {
-                            if self.use_equals {
+                    let single = /*TODO: delimeter*/false || values.len() == 1;
+                    match (
+                        self.use_equals,
+                        *multiple_values,
+                        *multiple_occurrences,
+                        single,
+                    ) {
+                        (true, true, _, true) => {
+                            args.push(format!(
+                                "{}={}",
+                                call_name,
+                                &values
+                                    .iter()
+                                    .map(|(s, _)| format!(" {}", s))
+                                    .collect::<String>()[1..]
+                            ));
+                        }
+                        (false, true, _, _) => {
+                            args.push(call_name.clone());
+
+                            for value in values {
+                                args.push(value.0.clone());
+                            }
+                        }
+                        (true, _, true, _) => {
+                            for value in values {
                                 args.push(format!("{}={}", call_name, value.0));
-                            } else {
+                            }
+                        }
+                        (false, _, true, _) => {
+                            for value in values {
                                 args.extend_from_slice(&[call_name.clone(), value.0.clone()]);
                             }
                         }
+                        (_, false, false, _) => unreachable!(
+                            "Either multiple_values or multiple_occurrences must be true"
+                        ),
+                        (true, true, false, false) => return Err("Can't be represented".into()),
                     }
                 } else {
                     for value in values {

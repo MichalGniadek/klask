@@ -109,6 +109,37 @@ fn panic_use_equals_pass_multiple_values() {
     )
 }
 
+#[derive(Debug, Clap, PartialEq, Eq)]
+struct DifferentMultipleValues {
+    #[clap(long, require_equals = true)]
+    multiple_equals_enter_one: Vec<String>,
+    #[clap(long, require_equals = true, multiple_occurrences = true)]
+    multiple_occurrences_equals: Vec<String>,
+    #[clap(long, multiple_occurrences = true)]
+    multiple_occurrences: Vec<String>,
+    #[clap(long)]
+    multiple: Vec<String>,
+    // TODO: delimeter
+}
+
+#[test]
+fn different_multiple_values() {
+    test_app(
+        |args| {
+            args[0].enter_multiple(["a"]);
+            args[1].enter_multiple(["b", "c"]);
+            args[2].enter_multiple(["d", "e"]);
+            args[3].enter_multiple(["f", "g"]);
+        },
+        DifferentMultipleValues {
+            multiple_equals_enter_one: vec!["a".into()],
+            multiple_occurrences_equals: vec!["b".into(), "c".into()],
+            multiple_occurrences: vec!["d".into(), "e".into()],
+            multiple: vec!["f".into(), "g".into()],
+        },
+    )
+}
+
 fn test_app<C, F>(setup: F, expected: C)
 where
     C: IntoApp + FromArgMatches + Debug + Eq,
