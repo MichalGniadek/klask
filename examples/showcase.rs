@@ -75,6 +75,7 @@ fn main() {
             stdin().read_to_string(&mut buf).unwrap();
             buf
         });
+        println!("Directory: {:?}", std::env::current_dir().unwrap());
         for i in 0..=5 {
             thread::sleep(time::Duration::from_secs(1));
             eprintln!("Counting to 5: {}", i);

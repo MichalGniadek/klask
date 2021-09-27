@@ -2,6 +2,7 @@ use crate::ExecuteError;
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver},
     thread,
@@ -26,14 +27,27 @@ impl ChildApp {
         args: Vec<String>,
         env: Option<Vec<(String, String)>>,
         stdin: Option<StdinType>,
+        working_dir: Option<String>,
     ) -> Result<Self, ExecuteError> {
-        let mut child = Command::new(std::env::current_exe()?)
+        let mut child = Command::new(std::env::current_exe()?);
+
+        child
             .args(args)
-            .envs(env.unwrap_or_default())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+
+        if let Some(env) = env {
+            child.envs(env);
+        }
+
+        if let Some(working_dir) = working_dir {
+            if !working_dir.is_empty() {
+                child.current_dir(PathBuf::from(working_dir).canonicalize()?);
+            }
+        }
+
+        let mut child = child.spawn()?;
 
         if let Some(stdin) = stdin {
             let mut child_stdin = child.stdin.take().unwrap();

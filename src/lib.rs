@@ -63,6 +63,7 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
                     tab: Tab::Arguments,
                     env: Some(vec![]),
                     stdin: Some(StdinType::Text(String::new())),
+                    working_dir: Some(String::new()),
                     output: None,
                     validation_error: None,
                     app,
@@ -110,6 +111,7 @@ struct Klask {
     tab: Tab,
     env: Option<Vec<(String, String)>>,
     stdin: Option<StdinType>,
+    working_dir: Option<String>,
     output: Option<Result<ChildApp, ExecuteError>>,
     validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
@@ -164,6 +166,20 @@ impl epi::App for Klask {
                     Tab::Arguments => self.state.update(ui, &mut self.validation_error),
                     Tab::Env => self.update_env(ui),
                     Tab::Stdin => self.update_stdin(ui),
+                }
+
+                if let Some(path) = &mut self.working_dir {
+                    ui.horizontal(|ui| {
+                        if ui.button("Select directory...").clicked() {
+                            if let Some(file) =
+                                FileDialog::new().show_open_single_dir().ok().flatten()
+                            {
+                                *path = file.to_string_lossy().into_owned();
+                            }
+                        }
+                        ui.text_edit_singleline_hint(path, "Working directory");
+                    });
+                    ui.add_space(10.0);
                 }
 
                 ui.horizontal(|ui| {
@@ -226,7 +242,12 @@ impl Klask {
             return Err("Environment variable can't be empty".into());
         }
 
-        ChildApp::run(args, self.env.clone(), self.stdin.clone())
+        ChildApp::run(
+            args,
+            self.env.clone(),
+            self.stdin.clone(),
+            self.working_dir.clone(),
+        )
     }
 
     fn update_output(&mut self, ui: &mut Ui) {
