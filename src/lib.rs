@@ -163,23 +163,25 @@ impl epi::App for Klask {
                 }
 
                 match self.tab {
-                    Tab::Arguments => self.state.update(ui, &mut self.validation_error),
+                    Tab::Arguments => {
+                        self.state.update(ui, &mut self.validation_error);
+
+                        if let Some(path) = &mut self.working_dir {
+                            ui.horizontal(|ui| {
+                                if ui.button("Select directory...").clicked() {
+                                    if let Some(file) =
+                                        FileDialog::new().show_open_single_dir().ok().flatten()
+                                    {
+                                        *path = file.to_string_lossy().into_owned();
+                                    }
+                                }
+                                ui.text_edit_singleline_hint(path, "Working directory");
+                            });
+                            ui.add_space(10.0);
+                        }
+                    }
                     Tab::Env => self.update_env(ui),
                     Tab::Stdin => self.update_stdin(ui),
-                }
-
-                if let Some(path) = &mut self.working_dir {
-                    ui.horizontal(|ui| {
-                        if ui.button("Select directory...").clicked() {
-                            if let Some(file) =
-                                FileDialog::new().show_open_single_dir().ok().flatten()
-                            {
-                                *path = file.to_string_lossy().into_owned();
-                            }
-                        }
-                        ui.text_edit_singleline_hint(path, "Working directory");
-                    });
-                    ui.add_space(10.0);
                 }
 
                 ui.horizontal(|ui| {
