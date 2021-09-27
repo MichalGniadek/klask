@@ -1,6 +1,7 @@
 use crate::ExecuteError;
 use std::{
-    io::{BufRead, BufReader, Read},
+    fs::File,
+    io::{BufRead, BufReader, Read, Write},
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver},
     thread,
@@ -14,17 +15,38 @@ pub struct ChildApp {
     output: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum StdinType {
+    File(String),
+    Text(String),
+}
+
 impl ChildApp {
     pub fn run(
         args: Vec<String>,
         env: Option<Vec<(String, String)>>,
+        stdin: Option<StdinType>,
     ) -> Result<Self, ExecuteError> {
         let mut child = Command::new(std::env::current_exe()?)
             .args(args)
             .envs(env.unwrap_or_default())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
+
+        if let Some(stdin) = stdin {
+            let mut child_stdin = child.stdin.take().unwrap();
+            match stdin {
+                StdinType::Text(text) => {
+                    child_stdin.write(text.as_bytes())?;
+                }
+                StdinType::File(path) => {
+                    let mut file = File::open(path)?;
+                    std::io::copy(&mut file, &mut child_stdin)?;
+                }
+            }
+        }
 
         let stdout =
             Self::spawn_thread_reader(child.stdout.take().ok_or(ExecuteError::NoStdoutOrStderr)?);

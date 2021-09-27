@@ -1,6 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use clap::{Clap, ValueHint};
-use std::{path::PathBuf, thread, time};
+use std::{
+    io::{stdin, Read},
+    path::PathBuf,
+    thread, time,
+};
 
 #[derive(Debug, Clap)]
 #[clap(name = "App name")]
@@ -59,7 +63,18 @@ pub enum InnerInnerSubcommand {
 fn main() {
     klask::run_derived::<Showcase, _>(|o| {
         println!("{:#?}", o);
-        println!("Env: {:#?}", std::env::vars().collect::<Vec<_>>());
+        let v = std::env::vars().collect::<Vec<_>>();
+        println!(
+            "Environment variables: {:?}, {:?}, and {} more",
+            v[0],
+            v[1],
+            v.len() - 2
+        );
+        println!("Stdin: {}", {
+            let mut buf = String::new();
+            stdin().read_to_string(&mut buf).unwrap();
+            buf
+        });
         for i in 0..=5 {
             thread::sleep(time::Duration::from_secs(1));
             eprintln!("Counting to 5: {}", i);

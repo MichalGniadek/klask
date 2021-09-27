@@ -31,7 +31,7 @@ mod error;
 mod klask_ui;
 
 use app_state::AppState;
-use child_app::ChildApp;
+use child_app::{ChildApp, StdinType};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
     egui::{self, Button, Color32, CtxRef, Grid, Ui},
@@ -39,6 +39,7 @@ use eframe::{
 };
 use error::{ExecuteError, ValidationErrorInfo};
 use klask_ui::KlaskUi;
+use native_dialog::FileDialog;
 
 /// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
@@ -59,9 +60,9 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
             None => {
                 let klask = Klask {
                     state: AppState::new(&app),
-                    enable_stdin: false,
                     tab: Tab::Arguments,
                     env: Some(vec![]),
+                    stdin: Some(StdinType::Text(String::new())),
                     output: None,
                     validation_error: None,
                     app,
@@ -106,9 +107,9 @@ where
 #[derive(Debug)]
 struct Klask {
     state: AppState,
-    enable_stdin: bool,
     tab: Tab,
     env: Option<Vec<(String, String)>>,
+    stdin: Option<StdinType>,
     output: Option<Result<ChildApp, ExecuteError>>,
     validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
@@ -116,7 +117,7 @@ struct Klask {
     app: App<'static>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum Tab {
     Arguments,
     Env,
@@ -133,7 +134,7 @@ impl epi::App for Klask {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
                 let cols = 1
                     + if self.env.is_some() { 1 } else { 0 }
-                    + if self.enable_stdin { 1 } else { 0 };
+                    + if self.stdin.is_some() { 1 } else { 0 };
 
                 if cols > 1 {
                     ui.columns(cols, |ui| {
@@ -150,7 +151,7 @@ impl epi::App for Klask {
                                 "Environment variables",
                             );
                         }
-                        if self.enable_stdin {
+                        if self.stdin.is_some() {
                             ui.next()
                                 .unwrap()
                                 .selectable_value(&mut self.tab, Tab::Stdin, "Input");
@@ -162,7 +163,7 @@ impl epi::App for Klask {
                 match self.tab {
                     Tab::Arguments => self.state.update(ui, &mut self.validation_error),
                     Tab::Env => self.update_env(ui),
-                    Tab::Stdin => {}
+                    Tab::Stdin => self.update_stdin(ui),
                 }
 
                 ui.horizontal(|ui| {
@@ -225,7 +226,7 @@ impl Klask {
             return Err("Environment variable can't be empty".into());
         }
 
-        ChildApp::run(args, self.env.clone())
+        ChildApp::run(args, self.env.clone(), self.stdin.clone())
     }
 
     fn update_output(&mut self, ui: &mut Ui) {
@@ -299,5 +300,42 @@ impl Klask {
         }
 
         ui.separator();
+    }
+
+    fn update_stdin(&mut self, ui: &mut Ui) {
+        let stdin = self.stdin.as_mut().unwrap();
+        ui.columns(2, |ui| {
+            if ui[0]
+                .selectable_label(matches!(stdin, StdinType::Text(_)), "Text")
+                .clicked()
+                && matches!(stdin, StdinType::File(_))
+            {
+                *stdin = StdinType::Text(String::new());
+            }
+            if ui[1]
+                .selectable_label(matches!(stdin, StdinType::File(_)), "File")
+                .clicked()
+                && matches!(stdin, StdinType::Text(_))
+            {
+                *stdin = StdinType::File(String::new());
+            }
+        });
+
+        match stdin {
+            StdinType::File(path) => {
+                ui.horizontal(|ui| {
+                    if ui.button("Select file...").clicked() {
+                        if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
+                        {
+                            *path = file.to_string_lossy().into_owned();
+                        }
+                    }
+                    ui.text_edit_singleline(path);
+                });
+            }
+            StdinType::Text(text) => {
+                ui.text_edit_multiline(text);
+            }
+        };
     }
 }
