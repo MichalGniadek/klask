@@ -59,6 +59,7 @@ pub enum InnerInnerSubcommand {
 fn main() {
     klask::run_derived::<Showcase, _>(|o| {
         println!("{:#?}", o);
+        println!("Env: {:#?}", std::env::vars().collect::<Vec<_>>());
         for i in 0..=5 {
             thread::sleep(time::Duration::from_secs(1));
             eprintln!("Counting to 5: {}", i);

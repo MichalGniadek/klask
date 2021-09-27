@@ -15,9 +15,13 @@ pub struct ChildApp {
 }
 
 impl ChildApp {
-    pub fn run(args: Vec<String>) -> Result<Self, ExecuteError> {
+    pub fn run(
+        args: Vec<String>,
+        env: Option<Vec<(String, String)>>,
+    ) -> Result<Self, ExecuteError> {
         let mut child = Command::new(std::env::current_exe()?)
             .args(args)
+            .envs(env.unwrap_or_default())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;

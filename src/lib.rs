@@ -34,7 +34,7 @@ use app_state::AppState;
 use child_app::ChildApp;
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, Color32, CtxRef, Ui},
+    egui::{self, Button, Color32, CtxRef, Grid, Ui},
     epi,
 };
 use error::{ExecuteError, ValidationErrorInfo};
@@ -58,8 +58,11 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
             // Called with no arguments -> start gui
             None => {
                 let klask = Klask {
-                    output: None,
                     state: AppState::new(&app),
+                    enable_stdin: false,
+                    tab: Tab::Arguments,
+                    env: Some(vec![]),
+                    output: None,
                     validation_error: None,
                     app,
                 };
@@ -102,12 +105,22 @@ where
 
 #[derive(Debug)]
 struct Klask {
-    output: Option<Result<ChildApp, ExecuteError>>,
     state: AppState,
+    enable_stdin: bool,
+    tab: Tab,
+    env: Option<Vec<(String, String)>>,
+    output: Option<Result<ChildApp, ExecuteError>>,
     validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
     app: App<'static>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+enum Tab {
+    Arguments,
+    Env,
+    Stdin,
 }
 
 impl epi::App for Klask {
@@ -118,7 +131,39 @@ impl epi::App for Klask {
     fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-                self.state.update(ui, &mut self.validation_error);
+                let cols = 1
+                    + if self.env.is_some() { 1 } else { 0 }
+                    + if self.enable_stdin { 1 } else { 0 };
+
+                if cols > 1 {
+                    ui.columns(cols, |ui| {
+                        let mut ui = ui.iter_mut();
+                        ui.next().unwrap().selectable_value(
+                            &mut self.tab,
+                            Tab::Arguments,
+                            "Arguments",
+                        );
+                        if self.env.is_some() {
+                            ui.next().unwrap().selectable_value(
+                                &mut self.tab,
+                                Tab::Env,
+                                "Environment variables",
+                            );
+                        }
+                        if self.enable_stdin {
+                            ui.next()
+                                .unwrap()
+                                .selectable_value(&mut self.tab, Tab::Stdin, "Input");
+                        }
+                    });
+                    ui.separator();
+                }
+
+                match self.tab {
+                    Tab::Arguments => self.state.update(ui, &mut self.validation_error),
+                    Tab::Env => self.update_env(ui),
+                    Tab::Stdin => {}
+                }
 
                 ui.horizontal(|ui| {
                     if ui
@@ -171,7 +216,16 @@ impl Klask {
         // Check for validation errors
         self.app.clone().try_get_matches_from(args.iter())?;
 
-        ChildApp::run(args)
+        if self
+            .env
+            .as_ref()
+            .and_then(|v| v.iter().find(|(key, _)| key.is_empty()))
+            .is_some()
+        {
+            return Err("Environment variable can't be empty".into());
+        }
+
+        ChildApp::run(args, self.env.clone())
     }
 
     fn update_output(&mut self, ui: &mut Ui) {
@@ -195,5 +249,55 @@ impl Klask {
             Some(Ok(c)) => c.is_running(),
             _ => false,
         }
+    }
+
+    fn update_env(&mut self, ui: &mut Ui) {
+        let env = self.env.as_mut().unwrap();
+        let mut remove_index = None;
+
+        if !env.is_empty() {
+            Grid::new(Tab::Env)
+                .striped(true)
+                // We can't just divide by 2, without taking spacing into account
+                // Instead we just set num_columns, and the second column will fill
+                .min_col_width(ui.available_width() / 3.0)
+                .num_columns(2)
+                .show(ui, |ui| {
+                    for (index, (key, value)) in env.iter_mut().enumerate() {
+                        let left = ui.horizontal(|ui| {
+                            let clicked = ui.small_button("-").clicked();
+
+                            let previous = key.is_empty().then(|| klask_ui::set_error_style(ui));
+                            ui.text_edit_singleline(key);
+                            if let Some(previous) = previous {
+                                ui.set_style(previous);
+                            }
+
+                            clicked
+                        });
+
+                        if left.inner {
+                            remove_index = Some(index);
+                        }
+
+                        ui.horizontal(|ui| {
+                            ui.label("=");
+                            ui.text_edit_singleline(value);
+                        });
+
+                        ui.end_row();
+                    }
+                });
+        }
+
+        if let Some(remove_index) = remove_index {
+            env.remove(remove_index);
+        }
+
+        if ui.button("New").clicked() {
+            env.push(Default::default());
+        }
+
+        ui.separator();
     }
 }
