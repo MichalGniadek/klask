@@ -1,5 +1,5 @@
 use cansi::{CategorisedSlice, Color};
-use eframe::egui::{Color32, Label, Response, Style, TextEdit, Ui};
+use eframe::egui::{vec2, Color32, Label, Response, Style, TextEdit, Ui};
 use linkify::{LinkFinder, LinkKind};
 
 pub fn set_error_style(ui: &mut Ui) -> Style {
@@ -39,40 +39,47 @@ impl KlaskUi for Ui {
             ..
         } in output
         {
-            for span in LinkFinder::new().spans(text) {
-                match span.kind() {
-                    Some(LinkKind::Url) => self.hyperlink(span.as_str()),
-                    Some(LinkKind::Email) => self.hyperlink(format!("mailto:{}", span.as_str())),
-                    Some(_) | None => {
-                        let mut label =
-                            Label::new(span.as_str()).text_color(ansi_color_to_egui(fg_colour));
-
-                        if bg_colour != Color::Black {
-                            label = label.background_color(ansi_color_to_egui(bg_colour));
+            let previous = self.style().spacing.item_spacing;
+            self.style_mut().spacing.item_spacing = vec2(0.0, 0.0);
+            self.horizontal_wrapped(|ui| {
+                for span in LinkFinder::new().spans(text) {
+                    match span.kind() {
+                        Some(LinkKind::Url) => ui.hyperlink(span.as_str()),
+                        Some(LinkKind::Email) => {
+                            ui.hyperlink_to(span.as_str(), format!("mailto:{}", span.as_str()))
                         }
+                        Some(_) | None => {
+                            let mut label =
+                                Label::new(span.as_str()).text_color(ansi_color_to_egui(fg_colour));
 
-                        if italic {
-                            label = label.italics();
+                            if bg_colour != Color::Black {
+                                label = label.background_color(ansi_color_to_egui(bg_colour));
+                            }
+
+                            if italic {
+                                label = label.italics();
+                            }
+
+                            if underline {
+                                label = label.underline();
+                            }
+
+                            if strikethrough {
+                                label = label.strikethrough();
+                            }
+
+                            label = match intensity {
+                                cansi::Intensity::Normal => label,
+                                cansi::Intensity::Bold => label.strong(),
+                                cansi::Intensity::Faint => label.weak(),
+                            };
+
+                            ui.add(label)
                         }
-
-                        if underline {
-                            label = label.underline();
-                        }
-
-                        if strikethrough {
-                            label = label.strikethrough();
-                        }
-
-                        label = match intensity {
-                            cansi::Intensity::Normal => label,
-                            cansi::Intensity::Bold => label.strong(),
-                            cansi::Intensity::Faint => label.weak(),
-                        };
-
-                        self.add(label)
-                    }
-                };
-            }
+                    };
+                }
+            });
+            self.style_mut().spacing.item_spacing = previous;
         }
     }
 }
