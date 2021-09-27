@@ -49,11 +49,16 @@ impl ChildApp {
 
         let mut child = child.spawn()?;
 
+        let stdout =
+            Self::spawn_thread_reader(child.stdout.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
+        let stderr =
+            Self::spawn_thread_reader(child.stderr.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
+
         if let Some(stdin) = stdin {
             let mut child_stdin = child.stdin.take().unwrap();
             match stdin {
                 StdinType::Text(text) => {
-                    child_stdin.write(text.as_bytes())?;
+                    child_stdin.write_all(text.as_bytes())?;
                 }
                 StdinType::File(path) => {
                     let mut file = File::open(path)?;
@@ -61,11 +66,6 @@ impl ChildApp {
                 }
             }
         }
-
-        let stdout =
-            Self::spawn_thread_reader(child.stdout.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
-        let stderr =
-            Self::spawn_thread_reader(child.stderr.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
 
         Ok(ChildApp {
             child,
