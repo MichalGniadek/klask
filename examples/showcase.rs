@@ -1,10 +1,8 @@
+//! Showcases clap parsing and different widgets
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use clap::{Clap, ValueHint};
-use std::{
-    io::{stdin, Read},
-    path::PathBuf,
-    thread, time,
-};
+use klask::Settings;
+use std::path::PathBuf;
 
 #[derive(Debug, Clap)]
 #[clap(name = "App name")]
@@ -61,24 +59,7 @@ pub enum InnerInnerSubcommand {
 }
 
 fn main() {
-    klask::run_derived::<Showcase, _>(|o| {
+    klask::run_derived::<Showcase, _>(Settings::default(), |o| {
         println!("{:#?}", o);
-        let v = std::env::vars().collect::<Vec<_>>();
-        println!(
-            "Environment variables: {:?}, {:?}, and {} more",
-            v[0],
-            v[1],
-            v.len() - 2
-        );
-        println!("Stdin: {}", {
-            let mut buf = String::new();
-            stdin().read_to_string(&mut buf).unwrap();
-            buf
-        });
-        println!("Directory: {:?}", std::env::current_dir().unwrap());
-        for i in 0..=5 {
-            thread::sleep(time::Duration::from_secs(1));
-            eprintln!("Counting to 5: {}", i);
-        }
     });
 }

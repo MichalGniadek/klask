@@ -7,9 +7,10 @@
 //! For example
 //! ```no_run
 //! # use clap::{App, Arg};
+//! # use klask::Settings;
 //! fn main() {
 //!     let app = App::new("Example").arg(Arg::new("debug").short('d'));
-//!     klask::run_app(app, |matches| {
+//!     klask::run_app(app, Settings::default(), |matches| {
 //!        println!("{}", matches.is_present("debug"))
 //!     });
 //! }
@@ -29,6 +30,7 @@ mod arg_state;
 mod child_app;
 mod error;
 mod klask_ui;
+mod settings;
 
 use app_state::AppState;
 use child_app::{ChildApp, StdinType};
@@ -41,16 +43,19 @@ use error::{ExecuteError, ValidationErrorInfo};
 use klask_ui::KlaskUi;
 use native_dialog::FileDialog;
 
+pub use settings::Settings;
+
 /// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
 /// # use clap::{App, Arg};
+/// # use klask::Settings;
 /// let app = App::new("Example").arg(Arg::new("debug").short('d'));
 
-/// klask::run_app(app, |matches| {
+/// klask::run_app(app, Settings::default(), |matches| {
 ///    println!("{}", matches.is_present("debug"))
 /// });
 /// ```
-pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
+pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches)) {
     // Wrap app in another in case no arguments is a valid configuration
     match App::new("outer").subcommand(app.clone()).try_get_matches() {
         Ok(matches) => match matches.subcommand_matches(app.get_name()) {
@@ -61,9 +66,13 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
                 let klask = Klask {
                     state: AppState::new(&app),
                     tab: Tab::Arguments,
-                    env: Some(vec![]),
-                    stdin: Some(StdinType::Text(String::new())),
-                    working_dir: Some(String::new()),
+                    env: settings.enable_env.map(|desc| (desc, vec![])),
+                    stdin: settings
+                        .enable_stdin
+                        .map(|desc| (desc, StdinType::Text(String::new()))),
+                    working_dir: settings
+                        .enable_working_dir
+                        .map(|desc| (desc, String::new())),
                     output: None,
                     validation_error: None,
                     app,
@@ -83,22 +92,23 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
 /// It's just a wrapper over [`run_app`].
 /// ```no_run
 /// # use clap::{App, Arg, Clap};
+/// # use klask::Settings;
 /// #[derive(Clap)]
 /// struct Example {
 ///     #[clap(short)]
 ///     debug: bool,
 /// }
 ///
-/// klask::run_derived::<Example, _>(|example|{
+/// klask::run_derived::<Example, _>(Settings::default(), |example|{
 ///     println!("{}", example.debug);
 /// });
 /// ```
-pub fn run_derived<C, F>(f: F)
+pub fn run_derived<C, F>(settings: Settings, f: F)
 where
     C: IntoApp + FromArgMatches,
     F: FnOnce(C),
 {
-    run_app(C::into_app(), |m| {
+    run_app(C::into_app(), settings, |m| {
         let matches = C::from_arg_matches(m)
             .expect("Internal error, C::from_arg_matches should always succeed");
         f(matches);
@@ -109,9 +119,12 @@ where
 struct Klask {
     state: AppState,
     tab: Tab,
-    env: Option<Vec<(String, String)>>,
-    stdin: Option<StdinType>,
-    working_dir: Option<String>,
+    /// First string is a description
+    env: Option<(String, Vec<(String, String)>)>,
+    /// First string is a description
+    stdin: Option<(String, StdinType)>,
+    /// First string is a description
+    working_dir: Option<(String, String)>,
     output: Option<Result<ChildApp, ExecuteError>>,
     validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
@@ -166,7 +179,11 @@ impl epi::App for Klask {
                     Tab::Arguments => {
                         self.state.update(ui, &mut self.validation_error);
 
-                        if let Some(path) = &mut self.working_dir {
+                        if let Some((ref desc, path)) = &mut self.working_dir {
+                            if !desc.is_empty() {
+                                ui.label(desc);
+                            }
+
                             ui.horizontal(|ui| {
                                 if ui.button("Select directory...").clicked() {
                                     if let Some(file) =
@@ -238,7 +255,7 @@ impl Klask {
         if self
             .env
             .as_ref()
-            .and_then(|v| v.iter().find(|(key, _)| key.is_empty()))
+            .and_then(|(_, v)| v.iter().find(|(key, _)| key.is_empty()))
             .is_some()
         {
             return Err("Environment variable can't be empty".into());
@@ -246,9 +263,9 @@ impl Klask {
 
         ChildApp::run(
             args,
-            self.env.clone(),
-            self.stdin.clone(),
-            self.working_dir.clone(),
+            self.env.clone().map(|(_, env)| env),
+            self.stdin.clone().map(|(_, stdin)| stdin),
+            self.working_dir.clone().map(|(_, dir)| dir),
         )
     }
 
@@ -276,8 +293,12 @@ impl Klask {
     }
 
     fn update_env(&mut self, ui: &mut Ui) {
-        let env = self.env.as_mut().unwrap();
+        let (ref desc, env) = self.env.as_mut().unwrap();
         let mut remove_index = None;
+
+        if !desc.is_empty() {
+            ui.label(desc);
+        }
 
         if !env.is_empty() {
             Grid::new(Tab::Env)
@@ -326,7 +347,12 @@ impl Klask {
     }
 
     fn update_stdin(&mut self, ui: &mut Ui) {
-        let stdin = self.stdin.as_mut().unwrap();
+        let (ref desc, stdin) = self.stdin.as_mut().unwrap();
+
+        if !desc.is_empty() {
+            ui.label(desc);
+        }
+
         ui.columns(2, |ui| {
             if ui[0]
                 .selectable_label(matches!(stdin, StdinType::Text(_)), "Text")
