@@ -28,20 +28,20 @@ impl KlaskUi for Ui {
     fn ansi_label(&mut self, text: &str) {
         let output = cansi::categorise_text(text);
 
-        for CategorisedSlice {
-            text,
-            fg_colour,
-            bg_colour,
-            intensity,
-            italic,
-            underline,
-            strikethrough,
-            ..
-        } in output
-        {
-            let previous = self.style().spacing.item_spacing;
-            self.style_mut().spacing.item_spacing = vec2(0.0, 0.0);
-            self.horizontal_wrapped(|ui| {
+        let previous = self.style().spacing.item_spacing;
+        self.style_mut().spacing.item_spacing = vec2(0.0, 0.0);
+        self.horizontal_wrapped(|ui| {
+            for CategorisedSlice {
+                text,
+                fg_colour,
+                bg_colour,
+                intensity,
+                italic,
+                underline,
+                strikethrough,
+                ..
+            } in output
+            {
                 for span in LinkFinder::new().spans(text) {
                     match span.kind() {
                         Some(LinkKind::Url) => ui.hyperlink(span.as_str()),
@@ -78,9 +78,9 @@ impl KlaskUi for Ui {
                         }
                     };
                 }
-            });
-            self.style_mut().spacing.item_spacing = previous;
-        }
+            }
+        });
+        self.style_mut().spacing.item_spacing = previous;
     }
 }
 

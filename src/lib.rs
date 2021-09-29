@@ -30,6 +30,7 @@ mod arg_state;
 mod child_app;
 mod error;
 mod klask_ui;
+mod output;
 mod settings;
 
 use app_state::AppState;
@@ -44,6 +45,10 @@ use klask_ui::KlaskUi;
 use native_dialog::FileDialog;
 
 pub use settings::Settings;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 /// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
@@ -113,6 +118,16 @@ where
             .expect("Internal error, C::from_arg_matches should always succeed");
         f(matches);
     });
+}
+
+pub fn progress_bar(desc: &str, value: f32) {
+    progress_bar_with_id(desc, desc, value)
+}
+
+pub fn progress_bar_with_id(id: impl Hash, desc: &str, value: f32) {
+    let mut h = DefaultHasher::new();
+    id.hash(&mut h);
+    output::OutputType::ProgressBar(desc.to_string(), value).send(h.finish());
 }
 
 #[derive(Debug)]
@@ -274,7 +289,7 @@ impl Klask {
 
     fn update_output(&mut self, ui: &mut Ui) {
         match &mut self.output {
-            Some(Ok(c)) => ui.ansi_label(c.read()),
+            Some(Ok(c)) => c.read().update(ui),
             Some(Err(err)) => {
                 ui.colored_label(Color32::RED, err.to_string());
             }
