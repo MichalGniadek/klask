@@ -59,16 +59,18 @@ impl AppState {
 
         ui.separator();
 
-        // It probably should be changed to wrapping when there are more than a few
-        ui.columns(self.subcommands.len(), |ui| {
-            for (i, name) in self.subcommands.keys().enumerate() {
-                ui[i].selectable_value(
-                    &mut self.current,
-                    Some(name.clone()),
-                    name.to_sentence_case(),
-                );
-            }
-        });
+        if !self.subcommands.is_empty() {
+            // It probably should be changed to wrapping when there are more than a few
+            ui.columns(self.subcommands.len(), |ui| {
+                for (i, name) in self.subcommands.keys().enumerate() {
+                    ui[i].selectable_value(
+                        &mut self.current,
+                        Some(name.clone()),
+                        name.to_sentence_case(),
+                    );
+                }
+            });
+        }
 
         if let Some(current) = &self.current {
             self.subcommands

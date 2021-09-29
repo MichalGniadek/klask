@@ -44,6 +44,12 @@ impl From<String> for ExecuteError {
     }
 }
 
+impl From<&str> for ExecuteError {
+    fn from(str: &str) -> Self {
+        Self::GuiError(str.to_string())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ValidationErrorInfo {
     name: String,

@@ -7,9 +7,10 @@
 //! For example
 //! ```no_run
 //! # use clap::{App, Arg};
+//! # use klask::Settings;
 //! fn main() {
 //!     let app = App::new("Example").arg(Arg::new("debug").short('d'));
-//!     klask::run_app(app, |matches| {
+//!     klask::run_app(app, Settings::default(), |matches| {
 //!        println!("{}", matches.is_present("debug"))
 //!     });
 //! }
@@ -29,27 +30,32 @@ mod arg_state;
 mod child_app;
 mod error;
 mod klask_ui;
+mod settings;
 
 use app_state::AppState;
-use child_app::ChildApp;
+use child_app::{ChildApp, StdinType};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, Color32, CtxRef, Ui},
+    egui::{self, Button, Color32, CtxRef, Grid, Ui},
     epi,
 };
 use error::{ExecuteError, ValidationErrorInfo};
 use klask_ui::KlaskUi;
+use native_dialog::FileDialog;
+
+pub use settings::Settings;
 
 /// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
 /// # use clap::{App, Arg};
+/// # use klask::Settings;
 /// let app = App::new("Example").arg(Arg::new("debug").short('d'));
 
-/// klask::run_app(app, |matches| {
+/// klask::run_app(app, Settings::default(), |matches| {
 ///    println!("{}", matches.is_present("debug"))
 /// });
 /// ```
-pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
+pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches)) {
     // Wrap app in another in case no arguments is a valid configuration
     match App::new("outer").subcommand(app.clone()).try_get_matches() {
         Ok(matches) => match matches.subcommand_matches(app.get_name()) {
@@ -58,8 +64,16 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
             // Called with no arguments -> start gui
             None => {
                 let klask = Klask {
-                    output: None,
                     state: AppState::new(&app),
+                    tab: Tab::Arguments,
+                    env: settings.enable_env.map(|desc| (desc, vec![])),
+                    stdin: settings
+                        .enable_stdin
+                        .map(|desc| (desc, StdinType::Text(String::new()))),
+                    working_dir: settings
+                        .enable_working_dir
+                        .map(|desc| (desc, String::new())),
+                    output: None,
                     validation_error: None,
                     app,
                 };
@@ -78,22 +92,23 @@ pub fn run_app(app: App<'static>, f: impl FnOnce(&ArgMatches)) {
 /// It's just a wrapper over [`run_app`].
 /// ```no_run
 /// # use clap::{App, Arg, Clap};
+/// # use klask::Settings;
 /// #[derive(Clap)]
 /// struct Example {
 ///     #[clap(short)]
 ///     debug: bool,
 /// }
 ///
-/// klask::run_derived::<Example, _>(|example|{
+/// klask::run_derived::<Example, _>(Settings::default(), |example|{
 ///     println!("{}", example.debug);
 /// });
 /// ```
-pub fn run_derived<C, F>(f: F)
+pub fn run_derived<C, F>(settings: Settings, f: F)
 where
     C: IntoApp + FromArgMatches,
     F: FnOnce(C),
 {
-    run_app(C::into_app(), |m| {
+    run_app(C::into_app(), settings, |m| {
         let matches = C::from_arg_matches(m)
             .expect("Internal error, C::from_arg_matches should always succeed");
         f(matches);
@@ -102,12 +117,26 @@ where
 
 #[derive(Debug)]
 struct Klask {
-    output: Option<Result<ChildApp, ExecuteError>>,
     state: AppState,
+    tab: Tab,
+    /// First string is a description
+    env: Option<(String, Vec<(String, String)>)>,
+    /// First string is a description
+    stdin: Option<(String, StdinType)>,
+    /// First string is a description
+    working_dir: Option<(String, String)>,
+    output: Option<Result<ChildApp, ExecuteError>>,
     validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
     app: App<'static>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+enum Tab {
+    Arguments,
+    Env,
+    Stdin,
 }
 
 impl epi::App for Klask {
@@ -118,8 +147,63 @@ impl epi::App for Klask {
     fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-                self.state.update(ui, &mut self.validation_error);
+                // Tab selection
+                let tab_count = 1
+                    + if self.env.is_some() { 1 } else { 0 }
+                    + if self.stdin.is_some() { 1 } else { 0 };
 
+                if tab_count > 1 {
+                    ui.columns(tab_count, |ui| {
+                        let mut index = 0;
+
+                        ui[index].selectable_value(&mut self.tab, Tab::Arguments, "Arguments");
+                        index += 1;
+
+                        if self.env.is_some() {
+                            ui[index].selectable_value(
+                                &mut self.tab,
+                                Tab::Env,
+                                "Environment variables",
+                            );
+                            index += 1;
+                        }
+                        if self.stdin.is_some() {
+                            ui[index].selectable_value(&mut self.tab, Tab::Stdin, "Input");
+                        }
+                    });
+
+                    ui.separator();
+                }
+
+                // Display selected tab
+                match self.tab {
+                    Tab::Arguments => {
+                        self.state.update(ui, &mut self.validation_error);
+
+                        // Working dir
+                        if let Some((ref desc, path)) = &mut self.working_dir {
+                            if !desc.is_empty() {
+                                ui.label(desc);
+                            }
+
+                            ui.horizontal(|ui| {
+                                if ui.button("Select directory...").clicked() {
+                                    if let Some(file) =
+                                        FileDialog::new().show_open_single_dir().ok().flatten()
+                                    {
+                                        *path = file.to_string_lossy().into_owned();
+                                    }
+                                }
+                                ui.text_edit_singleline_hint(path, "Working directory");
+                            });
+                            ui.add_space(10.0);
+                        }
+                    }
+                    Tab::Env => self.update_env(ui),
+                    Tab::Stdin => self.update_stdin(ui),
+                }
+
+                // Run button row
                 ui.horizontal(|ui| {
                     if ui
                         .add(Button::new("Run!").enabled(!self.is_child_running()))
@@ -171,7 +255,21 @@ impl Klask {
         // Check for validation errors
         self.app.clone().try_get_matches_from(args.iter())?;
 
-        ChildApp::run(args)
+        if self
+            .env
+            .as_ref()
+            .and_then(|(_, v)| v.iter().find(|(key, _)| key.is_empty()))
+            .is_some()
+        {
+            return Err("Environment variable can't be empty".into());
+        }
+
+        ChildApp::run(
+            args,
+            self.env.clone().map(|(_, env)| env),
+            self.stdin.clone().map(|(_, stdin)| stdin),
+            self.working_dir.clone().map(|(_, dir)| dir),
+        )
     }
 
     fn update_output(&mut self, ui: &mut Ui) {
@@ -195,5 +293,98 @@ impl Klask {
             Some(Ok(c)) => c.is_running(),
             _ => false,
         }
+    }
+
+    fn update_env(&mut self, ui: &mut Ui) {
+        let (ref desc, env) = self.env.as_mut().unwrap();
+
+        if !desc.is_empty() {
+            ui.label(desc);
+        }
+
+        if !env.is_empty() {
+            let mut remove_index = None;
+
+            Grid::new(Tab::Env)
+                .striped(true)
+                // We can't just divide by 2, without taking spacing into account
+                // Instead we just set num_columns, and the second column will fill
+                .min_col_width(ui.available_width() / 3.0)
+                .num_columns(2)
+                .show(ui, |ui| {
+                    for (index, (key, value)) in env.iter_mut().enumerate() {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("-").clicked() {
+                                remove_index = Some(index);
+                            }
+
+                            let prev_style = key.is_empty().then(|| klask_ui::set_error_style(ui));
+                            ui.text_edit_singleline(key);
+                            if let Some(previous) = prev_style {
+                                ui.set_style(previous);
+                            }
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label("=");
+                            ui.text_edit_singleline(value);
+                        });
+
+                        ui.end_row();
+                    }
+                });
+
+            if let Some(remove_index) = remove_index {
+                env.remove(remove_index);
+            }
+        }
+
+        if ui.button("New").clicked() {
+            env.push(Default::default());
+        }
+
+        ui.separator();
+    }
+
+    fn update_stdin(&mut self, ui: &mut Ui) {
+        let (ref desc, stdin) = self.stdin.as_mut().unwrap();
+
+        if !desc.is_empty() {
+            ui.label(desc);
+        }
+
+        ui.columns(2, |ui| {
+            if ui[0]
+                .selectable_label(matches!(stdin, StdinType::Text(_)), "Text")
+                .clicked()
+                && matches!(stdin, StdinType::File(_))
+            {
+                *stdin = StdinType::Text(String::new());
+            }
+            if ui[1]
+                .selectable_label(matches!(stdin, StdinType::File(_)), "File")
+                .clicked()
+                && matches!(stdin, StdinType::Text(_))
+            {
+                *stdin = StdinType::File(String::new());
+            }
+        });
+
+        match stdin {
+            StdinType::File(path) => {
+                ui.horizontal(|ui| {
+                    if ui.button("Select file...").clicked() {
+                        if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
+                        {
+                            *path = file.to_string_lossy().into_owned();
+                        }
+                    }
+                    ui.text_edit_singleline(path);
+                });
+            }
+            StdinType::Text(text) => {
+                ui.text_edit_multiline(text);
+            }
+        };
     }
 }

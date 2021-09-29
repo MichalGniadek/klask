@@ -1,6 +1,8 @@
 use crate::ExecuteError;
 use std::{
-    io::{BufRead, BufReader, Read},
+    fs::File,
+    io::{BufRead, BufReader, Read, Write},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::mpsc::{self, Receiver},
     thread,
@@ -14,18 +16,56 @@ pub struct ChildApp {
     output: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum StdinType {
+    File(String),
+    Text(String),
+}
+
 impl ChildApp {
-    pub fn run(args: Vec<String>) -> Result<Self, ExecuteError> {
-        let mut child = Command::new(std::env::current_exe()?)
+    pub fn run(
+        args: Vec<String>,
+        env: Option<Vec<(String, String)>>,
+        stdin: Option<StdinType>,
+        working_dir: Option<String>,
+    ) -> Result<Self, ExecuteError> {
+        let mut child = Command::new(std::env::current_exe()?);
+
+        child
             .args(args)
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+
+        if let Some(env) = env {
+            child.envs(env);
+        }
+
+        if let Some(working_dir) = working_dir {
+            if !working_dir.is_empty() {
+                child.current_dir(PathBuf::from(working_dir).canonicalize()?);
+            }
+        }
+
+        let mut child = child.spawn()?;
 
         let stdout =
             Self::spawn_thread_reader(child.stdout.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
         let stderr =
             Self::spawn_thread_reader(child.stderr.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
+
+        if let Some(stdin) = stdin {
+            let mut child_stdin = child.stdin.take().unwrap();
+            match stdin {
+                StdinType::Text(text) => {
+                    child_stdin.write_all(text.as_bytes())?;
+                }
+                StdinType::File(path) => {
+                    let mut file = File::open(path)?;
+                    std::io::copy(&mut file, &mut child_stdin)?;
+                }
+            }
+        }
 
         Ok(ChildApp {
             child,
