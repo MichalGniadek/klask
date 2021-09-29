@@ -147,38 +147,40 @@ impl epi::App for Klask {
     fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-                let cols = 1
+                // Tab selection
+                let tab_count = 1
                     + if self.env.is_some() { 1 } else { 0 }
                     + if self.stdin.is_some() { 1 } else { 0 };
 
-                if cols > 1 {
-                    ui.columns(cols, |ui| {
-                        let mut ui = ui.iter_mut();
-                        ui.next().unwrap().selectable_value(
-                            &mut self.tab,
-                            Tab::Arguments,
-                            "Arguments",
-                        );
+                if tab_count > 1 {
+                    ui.columns(tab_count, |ui| {
+                        let mut index = 0;
+
+                        ui[index].selectable_value(&mut self.tab, Tab::Arguments, "Arguments");
+                        index += 1;
+
                         if self.env.is_some() {
-                            ui.next().unwrap().selectable_value(
+                            ui[index].selectable_value(
                                 &mut self.tab,
                                 Tab::Env,
                                 "Environment variables",
                             );
+                            index += 1;
                         }
                         if self.stdin.is_some() {
-                            ui.next()
-                                .unwrap()
-                                .selectable_value(&mut self.tab, Tab::Stdin, "Input");
+                            ui[index].selectable_value(&mut self.tab, Tab::Stdin, "Input");
                         }
                     });
+
                     ui.separator();
                 }
 
+                // Display selected tab
                 match self.tab {
                     Tab::Arguments => {
                         self.state.update(ui, &mut self.validation_error);
 
+                        // Working dir
                         if let Some((ref desc, path)) = &mut self.working_dir {
                             if !desc.is_empty() {
                                 ui.label(desc);
@@ -201,6 +203,7 @@ impl epi::App for Klask {
                     Tab::Stdin => self.update_stdin(ui),
                 }
 
+                // Run button row
                 ui.horizontal(|ui| {
                     if ui
                         .add(Button::new("Run!").enabled(!self.is_child_running()))
@@ -294,13 +297,14 @@ impl Klask {
 
     fn update_env(&mut self, ui: &mut Ui) {
         let (ref desc, env) = self.env.as_mut().unwrap();
-        let mut remove_index = None;
 
         if !desc.is_empty() {
             ui.label(desc);
         }
 
         if !env.is_empty() {
+            let mut remove_index = None;
+
             Grid::new(Tab::Env)
                 .striped(true)
                 // We can't just divide by 2, without taking spacing into account
@@ -309,21 +313,17 @@ impl Klask {
                 .num_columns(2)
                 .show(ui, |ui| {
                     for (index, (key, value)) in env.iter_mut().enumerate() {
-                        let left = ui.horizontal(|ui| {
-                            let clicked = ui.small_button("-").clicked();
-
-                            let previous = key.is_empty().then(|| klask_ui::set_error_style(ui));
-                            ui.text_edit_singleline(key);
-                            if let Some(previous) = previous {
-                                ui.set_style(previous);
+                        ui.horizontal(|ui| {
+                            if ui.small_button("-").clicked() {
+                                remove_index = Some(index);
                             }
 
-                            clicked
+                            let prev_style = key.is_empty().then(|| klask_ui::set_error_style(ui));
+                            ui.text_edit_singleline(key);
+                            if let Some(previous) = prev_style {
+                                ui.set_style(previous);
+                            }
                         });
-
-                        if left.inner {
-                            remove_index = Some(index);
-                        }
 
                         ui.horizontal(|ui| {
                             ui.label("=");
@@ -333,10 +333,10 @@ impl Klask {
                         ui.end_row();
                     }
                 });
-        }
 
-        if let Some(remove_index) = remove_index {
-            env.remove(remove_index);
+            if let Some(remove_index) = remove_index {
+                env.remove(remove_index);
+            }
         }
 
         if ui.button("New").clicked() {
