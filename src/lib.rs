@@ -29,6 +29,7 @@ mod app_state;
 mod arg_state;
 mod child_app;
 mod error;
+/// Additional options for output like progress bars.
 pub mod output;
 mod settings;
 

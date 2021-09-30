@@ -4,14 +4,51 @@ use linkify::{LinkFinder, LinkKind};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-pub fn progress_bar(desc: &str, value: f32) {
-    progress_bar_with_id(desc, desc, value)
+/// Displays a progress bar in the output. First call creates
+/// a progress bar and future calls update it.
+///
+/// Value is a f32 between 0 and 1.
+///
+/// If the description is not static, use [`progress_bar_with_id`].
+/// ```no_run
+/// # use clap::{App, Arg};
+/// # use klask::Settings;
+/// fn main() {
+///     klask::run_app(App::new("Example"), Settings::default(), |matches| {
+///         for i in 0..=100 {
+///             klask::output::progress_bar("Static description", i as f32 / 100.0);
+///         }
+///     });
+/// }
+/// ```
+pub fn progress_bar(description: &str, value: f32) {
+    progress_bar_with_id(description, description, value)
 }
 
-pub fn progress_bar_with_id(id: impl Hash, desc: &str, value: f32) {
+/// Displays a progress bar in the output. First call creates
+/// a progress bar and future calls update it.
+///
+/// Value is a f32 between 0 and 1.
+/// Id is any hashable value that uniquely identifies a progress bar.
+/// ```no_run
+/// # use clap::{App, Arg};
+/// # use klask::Settings;
+/// fn main() {
+///     klask::run_app(App::new("Example"), Settings::default(), |matches| {
+///         for i in 0..=100 {
+///             klask::output::progress_bar_with_id(
+///                 "Progress",
+///                 &format!("Dynamic description [{}/{}]", i, 100),
+///                 i as f32 / 100.0,
+///             );
+///         }
+///     });
+/// }
+/// ```
+pub fn progress_bar_with_id(id: impl Hash, description: &str, value: f32) {
     let mut h = DefaultHasher::new();
     id.hash(&mut h);
-    OutputType::ProgressBar(desc.to_string(), value).send(h.finish());
+    OutputType::ProgressBar(description.to_string(), value).send(h.finish());
 }
 
 #[derive(Debug)]
@@ -114,7 +151,7 @@ fn format_output(ui: &mut Ui, text: &str) {
 
     let previous = ui.style().spacing.item_spacing;
     ui.style_mut().spacing.item_spacing = vec2(0.0, 0.0);
-    
+
     ui.horizontal_wrapped(|ui| {
         for CategorisedSlice {
             text,
