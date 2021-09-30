@@ -9,8 +9,8 @@ fn main() {
 
         for i in 0..=MAX {
             // You must pass in a value between [0, 1]
-            klask::progress_bar("Static description", i as f32 / MAX as f32);
-            klask::progress_bar_with_id(
+            klask::output::progress_bar("Static description", i as f32 / MAX as f32);
+            klask::output::progress_bar_with_id(
                 "Progress", // has to be a hashable id that identifies this progress bar
                 &format!("Dynamic description [{}/{}]", i, MAX),
                 i as f32 / MAX as f32,

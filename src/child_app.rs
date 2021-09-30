@@ -9,7 +9,7 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct ChildApp {
+pub(crate) struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,
     stderr: Option<Receiver<Option<String>>>,

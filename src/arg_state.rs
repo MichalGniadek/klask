@@ -1,6 +1,6 @@
-use crate::{error::ValidationErrorInfoTrait, klask_ui, KlaskUi, ValidationErrorInfo};
+use crate::{error::ValidationErrorInfoTrait, Klask, ValidationErrorInfo};
 use clap::{Arg, ArgSettings, ValueHint};
-use eframe::egui::{ComboBox, Ui};
+use eframe::egui::{ComboBox, TextEdit, Ui};
 use inflector::Inflector;
 use native_dialog::FileDialog;
 use uuid::Uuid;
@@ -111,7 +111,9 @@ impl ArgState {
         validation_error: bool,
     ) {
         let is_error = (!optional && value.is_empty()) || validation_error;
-        let previous_style = is_error.then(|| klask_ui::set_error_style(ui));
+        if is_error {
+            ui.set_style(Klask::error_style());
+        }
 
         if possible.is_empty() {
             ui.horizontal(|ui| {
@@ -133,13 +135,12 @@ impl ArgState {
                     }
                 }
 
-                ui.text_edit_singleline_hint(
-                    value,
-                    match (default, optional) {
+                ui.add(
+                    TextEdit::singleline(value).hint_text(match (default, optional) {
                         (Some(default), _) => default.as_str(),
                         (_, true) => "(Optional)",
                         (_, false) => "",
-                    },
+                    }),
                 );
             });
         } else {
@@ -155,8 +156,8 @@ impl ArgState {
                 });
         }
 
-        if let Some(previous) = previous_style {
-            ui.set_style(previous);
+        if is_error {
+            ui.set_style(Klask::klask_style());
         }
     }
 
