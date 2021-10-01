@@ -1,4 +1,4 @@
-use crate::ExecuteError;
+use crate::{output::Output, ExecuteError};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
@@ -9,11 +9,11 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct ChildApp {
+pub(crate) struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,
     stderr: Option<Receiver<Option<String>>>,
-    output: String,
+    output: Output,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -71,14 +71,16 @@ impl ChildApp {
             child,
             stdout: Some(stdout),
             stderr: Some(stderr),
-            output: String::new(),
+            output: Output::new(),
         })
     }
 
-    pub fn read(&mut self) -> &str {
-        Self::read_stdio(&mut self.output, &mut self.stdout);
-        Self::read_stdio(&mut self.output, &mut self.stderr);
-        &self.output
+    pub fn read(&mut self) -> &mut Output {
+        let mut out = String::new();
+        Self::read_stdio(&mut out, &mut self.stdout);
+        Self::read_stdio(&mut out, &mut self.stderr);
+        self.output.parse(&out);
+        &mut self.output
     }
 
     pub fn is_running(&self) -> bool {

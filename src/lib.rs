@@ -29,21 +29,22 @@ mod app_state;
 mod arg_state;
 mod child_app;
 mod error;
-mod klask_ui;
+/// Additional options for output like progress bars.
+pub mod output;
 mod settings;
 
 use app_state::AppState;
 use child_app::{ChildApp, StdinType};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, Color32, CtxRef, Grid, Ui},
+    egui::{self, style::Spacing, Button, Color32, CtxRef, Grid, Style, TextEdit, Ui},
     epi,
 };
 use error::{ExecuteError, ValidationErrorInfo};
-use klask_ui::KlaskUi;
 use native_dialog::FileDialog;
 
 pub use settings::Settings;
+use std::hash::Hash;
 
 /// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
@@ -194,7 +195,7 @@ impl epi::App for Klask {
                                         *path = file.to_string_lossy().into_owned();
                                     }
                                 }
-                                ui.text_edit_singleline_hint(path, "Working directory");
+                                ui.add(TextEdit::singleline(path).hint_text("Working directory"))
                             });
                             ui.add_space(10.0);
                         }
@@ -237,10 +238,7 @@ impl epi::App for Klask {
     }
 
     fn setup(&mut self, ctx: &CtxRef, _: &mut epi::Frame<'_>, _: Option<&dyn epi::Storage>) {
-        let mut base_style = (*ctx.style()).clone();
-        base_style.spacing.text_edit_width = f32::MAX;
-        base_style.spacing.item_spacing.y = 8.0;
-        ctx.set_style(base_style);
+        ctx.set_style(Klask::klask_style());
     }
 
     fn on_exit(&mut self) {
@@ -274,7 +272,7 @@ impl Klask {
 
     fn update_output(&mut self, ui: &mut Ui) {
         match &mut self.output {
-            Some(Ok(c)) => ui.ansi_label(c.read()),
+            Some(Ok(c)) => c.read().update(ui),
             Some(Err(err)) => {
                 ui.colored_label(Color32::RED, err.to_string());
             }
@@ -318,10 +316,14 @@ impl Klask {
                                 remove_index = Some(index);
                             }
 
-                            let prev_style = key.is_empty().then(|| klask_ui::set_error_style(ui));
+                            if key.is_empty() {
+                                ui.set_style(Klask::error_style());
+                            }
+
                             ui.text_edit_singleline(key);
-                            if let Some(previous) = prev_style {
-                                ui.set_style(previous);
+
+                            if key.is_empty() {
+                                ui.set_style(Klask::klask_style());
                             }
                         });
 
@@ -386,5 +388,28 @@ impl Klask {
                 ui.text_edit_multiline(text);
             }
         };
+    }
+
+    fn klask_style() -> Style {
+        Style {
+            spacing: Spacing {
+                text_edit_width: f32::MAX,
+                item_spacing: egui::vec2(8.0, 8.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn error_style() -> Style {
+        let mut style = Self::klask_style();
+        style.visuals.widgets.inactive.bg_stroke.color = Color32::RED;
+        style.visuals.widgets.inactive.bg_stroke.width = 1.0;
+        style.visuals.widgets.hovered.bg_stroke.color = Color32::RED;
+        style.visuals.widgets.active.bg_stroke.color = Color32::RED;
+        style.visuals.widgets.open.bg_stroke.color = Color32::RED;
+        style.visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
+        style.visuals.selection.stroke.color = Color32::RED;
+        style
     }
 }
