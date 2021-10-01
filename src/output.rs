@@ -95,6 +95,21 @@ impl Output {
         }
     }
 
+    pub fn get_output_string(&self) -> String {
+        self.0
+            .iter()
+            .filter_map(|(_, o)| {
+                if let OutputType::Text(text) = o {
+                    Some(text)
+                } else {
+                    None
+                }
+            })
+            .flat_map(|text| cansi::categorise_text(text))
+            .map(|slice| slice.text)
+            .collect::<String>()
+    }
+
     pub fn update(&mut self, ui: &mut Ui) {
         for (_, o) in &mut self.0 {
             match o {
