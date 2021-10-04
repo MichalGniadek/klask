@@ -219,11 +219,17 @@ impl epi::App for Klask {
                             };
                     }
 
-                    if self.is_child_running() {
-                        if ui.button("Kill").clicked() {
-                            self.kill_child();
-                        }
+                    if self.is_child_running() && ui.button("Kill").clicked() {
+                        self.kill_child();
+                    }
 
+                    if let Some(Ok(child)) = &self.output {
+                        if ui.button("Copy output").clicked() {
+                            ctx.output().copied_text = child.output.get_output_string();
+                        }
+                    }
+
+                    if self.is_child_running() {
                         let mut running_text = String::from("Running");
                         for _ in 0..((2.0 * ui.input().time) as i32 % 4) {
                             running_text.push('.')

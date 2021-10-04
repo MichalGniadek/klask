@@ -95,12 +95,29 @@ impl Output {
         }
     }
 
+    pub fn get_output_string(&self) -> String {
+        self.0
+            .iter()
+            .map(|(_, o)| match o {
+                OutputType::Text(text) => text,
+                OutputType::ProgressBar(text, _) => text,
+            })
+            .flat_map(|text| cansi::categorise_text(text))
+            .map(|slice| slice.text)
+            .collect::<String>()
+    }
+
     pub fn update(&mut self, ui: &mut Ui) {
         for (_, o) in &mut self.0 {
             match o {
                 OutputType::Text(ref text) => format_output(ui, text),
                 OutputType::ProgressBar(ref mess, value) => {
-                    ui.add(ProgressBar::new(*value).text(mess).animate(true));
+                    // Get rid of the ending newline
+                    ui.add(
+                        ProgressBar::new(*value)
+                            .text(&mess[..mess.len() - 1])
+                            .animate(true),
+                    );
                 }
             }
         }
@@ -120,12 +137,13 @@ impl OutputType {
     const PROGRESS_BAR_STR: &'static str = "progress-bar";
 
     pub fn send(self, id: u64) {
+        // Make sure to get rid of any newlines
         match self {
             OutputType::Text(s) => print!("{}", s),
             OutputType::ProgressBar(desc, value) => send_message(&[
                 &id.to_string(),
                 Self::PROGRESS_BAR_STR,
-                &desc,
+                &desc.replace('\n', " "),
                 &value.to_string(),
             ]),
         }
@@ -133,8 +151,9 @@ impl OutputType {
 
     pub fn parse<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Self> {
         match iter.next() {
+            // Add a newline here for copying out text
             Some(Self::PROGRESS_BAR_STR) => Some(Self::ProgressBar(
-                iter.next().unwrap_or_default().to_string(),
+                format!("{}\n", iter.next().unwrap_or_default()),
                 iter.next()
                     .map(|s| s.parse().ok())
                     .flatten()

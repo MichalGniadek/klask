@@ -13,7 +13,7 @@ pub(crate) struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,
     stderr: Option<Receiver<Option<String>>>,
-    output: Output,
+    pub output: Output,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
