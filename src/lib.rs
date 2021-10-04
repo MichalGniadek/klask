@@ -177,7 +177,7 @@ impl epi::App for Klask {
                 // Display selected tab
                 match self.tab {
                     Tab::Arguments => {
-                        self.state.update(ui);
+                        ui.add(&mut self.state);
 
                         // Working dir
                         if let Some((ref desc, path)) = &mut self.working_dir {
@@ -209,14 +209,14 @@ impl epi::App for Klask {
                         .clicked()
                     {
                         let output = self.execute();
-                        
+
                         if let Err(ExecuteError::ValidationError { name, message }) = &output {
                             self.state.update_validation_error(name, message);
-                        }else{
+                        } else {
                             // Reset
                             self.state.update_validation_error("", "");
                         }
-                        
+
                         self.output = Some(output);
                     }
 

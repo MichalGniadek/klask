@@ -1,6 +1,6 @@
 use crate::Klask;
 use clap::{Arg, ArgSettings, ValueHint};
-use eframe::egui::{ComboBox, TextEdit, Ui};
+use eframe::egui::{widgets::Widget, ComboBox, Response, TextEdit, Ui};
 use inflector::Inflector;
 use native_dialog::FileDialog;
 use uuid::Uuid;
@@ -107,7 +107,7 @@ impl ArgState {
         self.validation_error = (self.name == name).then(|| message.to_string());
     }
 
-    pub fn update_single(
+    pub fn ui_single_row(
         ui: &mut Ui,
         (value, id): &mut (String, Uuid),
         default: &Option<String>,
@@ -115,13 +115,13 @@ impl ArgState {
         value_hint: ValueHint,
         optional: bool,
         validation_error: bool,
-    ) {
+    ) -> Response {
         let is_error = (!optional && value.is_empty()) || validation_error;
         if is_error {
             ui.set_style(Klask::error_style());
         }
 
-        if possible.is_empty() {
+        let inner_response = if possible.is_empty() {
             ui.horizontal(|ui| {
                 if matches!(
                     value_hint,
@@ -148,7 +148,9 @@ impl ArgState {
                         (_, false) => "",
                     }),
                 );
-            });
+
+                Some(())
+            })
         } else {
             ComboBox::from_id_source(id)
                 .selected_text(&value)
@@ -159,115 +161,14 @@ impl ArgState {
                     for p in possible {
                         ui.selectable_value(value, p.clone(), p);
                     }
-                });
-        }
+                })
+        };
 
         if is_error {
             ui.set_style(Klask::klask_style());
         }
-    }
 
-    pub fn update(&mut self, ui: &mut Ui) {
-        let label = ui.label(&self.name);
-
-        if let Some(desc) = &self.desc {
-            label.on_hover_text(desc);
-        }
-
-        let is_validation_error = self.validation_error.is_some();
-
-        match &mut self.kind {
-            ArgKind::String {
-                value,
-                default,
-                possible,
-                value_hint,
-            } => Self::update_single(
-                ui,
-                value,
-                default,
-                possible,
-                *value_hint,
-                self.optional && !self.forbid_empty,
-                is_validation_error,
-            ),
-            ArgKind::MultipleStrings {
-                values,
-                default,
-                possible,
-                value_hint,
-                ..
-            } => {
-                let forbid_empty = self.forbid_empty;
-                let list = ui.vertical(|ui| {
-                    let mut remove_index = None;
-
-                    for (index, value) in values.iter_mut().enumerate() {
-                        ui.horizontal(|ui| {
-                            if ui.small_button("-").clicked() {
-                                remove_index = Some(index);
-                            }
-
-                            Self::update_single(
-                                ui,
-                                value,
-                                &None,
-                                possible,
-                                *value_hint,
-                                !forbid_empty,
-                                is_validation_error,
-                            );
-                        });
-                    }
-
-                    if let Some(index) = remove_index {
-                        values.remove(index);
-                    }
-
-                    ui.horizontal(|ui| {
-                        if ui.button("New value").clicked() {
-                            values.push(("".into(), Uuid::new_v4()));
-                        }
-
-                        let text = if default.is_empty() {
-                            "Reset"
-                        } else {
-                            "Reset to default"
-                        };
-
-                        ui.add_space(20.0);
-                        if ui.button(text).clicked() {
-                            *values = default
-                                .iter()
-                                .map(|s| (s.to_string(), Uuid::new_v4()))
-                                .collect();
-                        }
-                    });
-                });
-
-                if let Some(message) = &mut self.validation_error {
-                    if list.response.on_hover_text(message).changed() {
-                        self.validation_error = None;
-                    }
-                }
-            }
-            ArgKind::Occurences(i) => {
-                ui.horizontal(|ui| {
-                    if ui.small_button("-").clicked() {
-                        *i = (*i - 1).max(0);
-                    }
-
-                    ui.label(i.to_string());
-
-                    if ui.small_button("+").clicked() {
-                        *i += 1;
-                    }
-                });
-            }
-            ArgKind::Bool(bool) => {
-                ui.checkbox(bool, "");
-            }
-        };
+        inner_response.response
     }
 
     pub fn get_cmd_args(&self, mut args: Vec<String>) -> Result<Vec<String>, String> {
@@ -376,5 +277,116 @@ impl ArgState {
         }
 
         Ok(args)
+    }
+}
+
+impl Widget for &mut ArgState {
+    fn ui(self, ui: &mut Ui) -> eframe::egui::Response {
+        let label = ui.label(&self.name);
+
+        if let Some(desc) = &self.desc {
+            label.on_hover_text(desc);
+        }
+
+        // Grid column automatically switches here
+
+        let is_validation_error = self.validation_error.is_some();
+
+        match &mut self.kind {
+            ArgKind::String {
+                value,
+                default,
+                possible,
+                value_hint,
+            } => ArgState::ui_single_row(
+                ui,
+                value,
+                default,
+                possible,
+                *value_hint,
+                self.optional && !self.forbid_empty,
+                is_validation_error,
+            ),
+            ArgKind::MultipleStrings {
+                values,
+                default,
+                possible,
+                value_hint,
+                ..
+            } => {
+                let forbid_empty = self.forbid_empty;
+                let mut list = ui
+                    .vertical(|ui| {
+                        let mut remove_index = None;
+
+                        for (index, value) in values.iter_mut().enumerate() {
+                            ui.horizontal(|ui| {
+                                if ui.small_button("-").clicked() {
+                                    remove_index = Some(index);
+                                }
+
+                                ArgState::ui_single_row(
+                                    ui,
+                                    value,
+                                    &None,
+                                    possible,
+                                    *value_hint,
+                                    !forbid_empty,
+                                    is_validation_error,
+                                );
+                            });
+                        }
+
+                        if let Some(index) = remove_index {
+                            values.remove(index);
+                        }
+
+                        ui.horizontal(|ui| {
+                            if ui.button("New value").clicked() {
+                                values.push(("".into(), Uuid::new_v4()));
+                            }
+
+                            let text = if default.is_empty() {
+                                "Reset"
+                            } else {
+                                "Reset to default"
+                            };
+
+                            ui.add_space(20.0);
+                            if ui.button(text).clicked() {
+                                *values = default
+                                    .iter()
+                                    .map(|s| (s.to_string(), Uuid::new_v4()))
+                                    .collect();
+                            }
+                        });
+                    })
+                    .response;
+
+                if let Some(message) = &mut self.validation_error {
+                    list = list.on_hover_text(message);
+                    if list.changed() {
+                        self.validation_error = None;
+                    }
+                }
+
+                list
+            }
+            ArgKind::Occurences(i) => {
+                ui.horizontal(|ui| {
+                    if ui.small_button("-").clicked() {
+                        *i = (*i - 1).max(0);
+                    }
+
+                    ui.label(i.to_string());
+
+                    if ui.small_button("+").clicked() {
+                        *i += 1;
+                    }
+                })
+                .response
+            }
+            ArgKind::Bool(bool) => ui.checkbox(bool, ""),
+        }
     }
 }
