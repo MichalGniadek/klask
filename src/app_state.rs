@@ -1,4 +1,4 @@
-use crate::{arg_state::ArgState, ValidationErrorInfo};
+use crate::arg_state::ArgState;
 use clap::App;
 use eframe::egui::{Grid, Ui};
 use inflector::Inflector;
@@ -39,7 +39,20 @@ impl AppState {
         }
     }
 
-    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
+    pub fn update_validation_error(&mut self, name: &str, message: &str) {
+        for arg in &mut self.args{
+            arg.update_validation_error(name, message);
+        }
+
+        if let Some(current) = &self.current {
+            self.subcommands
+                .get_mut(current)
+                .unwrap()
+                .update_validation_error(name, message);
+        }
+    }
+
+    pub fn update(&mut self, ui: &mut Ui) {
         if let Some(ref about) = self.about {
             ui.label(about);
         }
@@ -51,7 +64,7 @@ impl AppState {
                 .striped(true)
                 .show(ui, |ui| {
                     for arg in &mut self.args {
-                        arg.update(ui, validation_error);
+                        arg.update(ui);
                         ui.end_row();
                     }
                 });
@@ -73,10 +86,7 @@ impl AppState {
         }
 
         if let Some(current) = &self.current {
-            self.subcommands
-                .get_mut(current)
-                .unwrap()
-                .update(ui, validation_error);
+            self.subcommands.get_mut(current).unwrap().update(ui);
         }
     }
 

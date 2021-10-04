@@ -40,7 +40,7 @@ use eframe::{
     egui::{self, style::Spacing, Button, Color32, CtxRef, Grid, Style, TextEdit, Ui},
     epi,
 };
-use error::{ExecuteError, ValidationErrorInfo};
+use error::ExecuteError;
 use native_dialog::FileDialog;
 
 pub use settings::Settings;
@@ -75,7 +75,6 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
                         .enable_working_dir
                         .map(|desc| (desc, String::new())),
                     output: None,
-                    validation_error: None,
                     app,
                 };
                 let native_options = eframe::NativeOptions::default();
@@ -127,7 +126,6 @@ struct Klask {
     /// First string is a description
     working_dir: Option<(String, String)>,
     output: Option<Result<ChildApp, ExecuteError>>,
-    validation_error: Option<ValidationErrorInfo>,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
     app: App<'static>,
@@ -179,7 +177,7 @@ impl epi::App for Klask {
                 // Display selected tab
                 match self.tab {
                     Tab::Arguments => {
-                        self.state.update(ui, &mut self.validation_error);
+                        self.state.update(ui);
 
                         // Working dir
                         if let Some((ref desc, path)) = &mut self.working_dir {
@@ -210,13 +208,16 @@ impl epi::App for Klask {
                         .add(Button::new("Run!").enabled(!self.is_child_running()))
                         .clicked()
                     {
-                        self.output = Some(self.execute());
-                        self.validation_error =
-                            if let Some(Err(ExecuteError::ValidationError(info))) = &self.output {
-                                Some(info.clone())
-                            } else {
-                                None
-                            };
+                        let output = self.execute();
+                        
+                        if let Err(ExecuteError::ValidationError { name, message }) = &output {
+                            self.state.update_validation_error(name, message);
+                        }else{
+                            // Reset
+                            self.state.update_validation_error("", "");
+                        }
+                        
+                        self.output = Some(output);
                     }
 
                     if self.is_child_running() && ui.button("Kill").clicked() {

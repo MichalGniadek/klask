@@ -1,4 +1,4 @@
-use crate::{error::ValidationErrorInfoTrait, Klask, ValidationErrorInfo};
+use crate::Klask;
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{ComboBox, TextEdit, Ui};
 use inflector::Inflector;
@@ -14,6 +14,7 @@ pub struct ArgState {
     pub use_equals: bool,
     pub forbid_empty: bool,
     pub kind: ArgKind,
+    pub validation_error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -96,11 +97,16 @@ impl From<&Arg<'_>> for ArgState {
             use_equals: a.is_set(ArgSettings::RequireEquals),
             forbid_empty: a.is_set(ArgSettings::ForbidEmptyValues),
             kind,
+            validation_error: None,
         }
     }
 }
 
 impl ArgState {
+    pub fn update_validation_error(&mut self, name: &str, message: &str) {
+        self.validation_error = (self.name == name).then(|| message.to_string());
+    }
+
     pub fn update_single(
         ui: &mut Ui,
         (value, id): &mut (String, Uuid),
@@ -161,14 +167,14 @@ impl ArgState {
         }
     }
 
-    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
+    pub fn update(&mut self, ui: &mut Ui) {
         let label = ui.label(&self.name);
 
         if let Some(desc) = &self.desc {
             label.on_hover_text(desc);
         }
 
-        let is_validation_error = validation_error.is(&self.name).is_some();
+        let is_validation_error = self.validation_error.is_some();
 
         match &mut self.kind {
             ArgKind::String {
@@ -239,9 +245,9 @@ impl ArgState {
                     });
                 });
 
-                if let Some(message) = validation_error.is(&self.name) {
+                if let Some(message) = &mut self.validation_error {
                     if list.response.on_hover_text(message).changed() {
-                        *validation_error = None;
+                        self.validation_error = None;
                     }
                 }
             }
