@@ -39,23 +39,23 @@ pub enum ArgKind {
     Bool(bool),
 }
 
-impl From<&Arg<'_>> for ArgState {
-    fn from(a: &Arg) -> Self {
-        let kind = if a.is_set(ArgSettings::TakesValue) {
-            let mut default = a
+impl ArgState {
+    pub fn new(arg: &Arg) -> Self {
+        let kind = if arg.is_set(ArgSettings::TakesValue) {
+            let mut default = arg
                 .get_default_values()
                 .iter()
                 .map(|s| s.to_string_lossy().into_owned());
 
-            let possible = a
+            let possible = arg
                 .get_possible_values()
                 .unwrap_or_default()
                 .iter()
                 .map(|s| s.to_string())
                 .collect();
 
-            let multiple_values = a.is_set(ArgSettings::MultipleValues);
-            let multiple_occurrences = a.is_set(ArgSettings::MultipleOccurrences);
+            let multiple_values = arg.is_set(ArgSettings::MultipleValues);
+            let multiple_occurrences = arg.is_set(ArgSettings::MultipleOccurrences);
 
             if multiple_occurrences | multiple_values {
                 ArgKind::MultipleStrings {
@@ -64,45 +64,43 @@ impl From<&Arg<'_>> for ArgState {
                     possible,
                     multiple_values,
                     multiple_occurrences,
-                    use_delimiter: a.is_set(ArgSettings::UseValueDelimiter)
-                        | a.is_set(ArgSettings::RequireDelimiter),
-                    req_delimiter: a.is_set(ArgSettings::RequireDelimiter),
-                    value_hint: a.get_value_hint(),
+                    use_delimiter: arg.is_set(ArgSettings::UseValueDelimiter)
+                        | arg.is_set(ArgSettings::RequireDelimiter),
+                    req_delimiter: arg.is_set(ArgSettings::RequireDelimiter),
+                    value_hint: arg.get_value_hint(),
                 }
             } else {
                 ArgKind::String {
                     value: ("".to_string(), Uuid::new_v4()),
                     default: default.next(),
                     possible,
-                    value_hint: a.get_value_hint(),
+                    value_hint: arg.get_value_hint(),
                 }
             }
-        } else if a.is_set(ArgSettings::MultipleOccurrences) {
+        } else if arg.is_set(ArgSettings::MultipleOccurrences) {
             ArgKind::Occurences(0)
         } else {
             ArgKind::Bool(false)
         };
 
         Self {
-            name: a.get_name().to_string().to_sentence_case(),
-            call_name: a
+            name: arg.get_name().to_string().to_sentence_case(),
+            call_name: arg
                 .get_long()
                 .map(|s| format!("--{}", s))
-                .or_else(|| a.get_short().map(|c| format!("-{}", c))),
-            desc: a
+                .or_else(|| arg.get_short().map(|c| format!("-{}", c))),
+            desc: arg
                 .get_long_about()
                 .map(ToString::to_string)
-                .or_else(|| a.get_about().map(ToString::to_string)),
-            optional: !a.is_set(ArgSettings::Required),
-            use_equals: a.is_set(ArgSettings::RequireEquals),
-            forbid_empty: a.is_set(ArgSettings::ForbidEmptyValues),
+                .or_else(|| arg.get_about().map(ToString::to_string)),
+            optional: !arg.is_set(ArgSettings::Required),
+            use_equals: arg.is_set(ArgSettings::RequireEquals),
+            forbid_empty: arg.is_set(ArgSettings::ForbidEmptyValues),
             kind,
             validation_error: None,
         }
     }
-}
 
-impl ArgState {
     pub fn update_validation_error(&mut self, name: &str, message: &str) {
         self.validation_error = (self.name == name).then(|| message.to_string());
     }

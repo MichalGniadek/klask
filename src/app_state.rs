@@ -19,7 +19,7 @@ impl AppState {
         let args = app
             .get_arguments()
             .filter(|a| a.get_name() != "help" && a.get_name() != "version")
-            .map(ArgState::from)
+            .map(ArgState::new)
             .collect();
 
         let subcommands = app
