@@ -1,4 +1,4 @@
-use crate::ExecutionError;
+use crate::{ExecutionError, CHILD_APP_ENV_VAR};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
@@ -31,6 +31,7 @@ impl ChildApp {
         let mut child = Command::new(std::env::current_exe()?);
 
         child
+            .env(CHILD_APP_ENV_VAR, "")
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -48,10 +49,19 @@ impl ChildApp {
 
         let mut child = child.spawn()?;
 
-        let stdout =
-            Self::spawn_thread_reader(child.stdout.take().ok_or(ExecutionError::NoStdoutOrStderr)?);
-        let stderr =
-            Self::spawn_thread_reader(child.stderr.take().ok_or(ExecutionError::NoStdoutOrStderr)?);
+        let stdout = Self::spawn_thread_reader(
+            child
+                .stdout
+                .take()
+                .ok_or(ExecutionError::NoStdoutOrStderr)?,
+        );
+
+        let stderr = Self::spawn_thread_reader(
+            child
+                .stderr
+                .take()
+                .ok_or(ExecutionError::NoStdoutOrStderr)?,
+        );
 
         if let Some(stdin) = stdin {
             let mut child_stdin = child.stdin.take().unwrap();
@@ -122,7 +132,7 @@ impl ChildApp {
     }
 }
 
-impl Drop for ChildApp{
+impl Drop for ChildApp {
     fn drop(&mut self) {
         self.kill();
     }

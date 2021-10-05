@@ -47,6 +47,8 @@ use output::Output;
 pub use settings::Settings;
 use std::hash::Hash;
 
+const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
+
 /// Call with an [`App`] and a closure that contains the code that would normally be in `main`.
 /// ```no_run
 /// # use clap::{App, Arg};
@@ -58,34 +60,33 @@ use std::hash::Hash;
 /// });
 /// ```
 pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches)) {
-    // Wrap app in another in case no arguments is a valid configuration
-    match App::new("outer").subcommand(app.clone()).try_get_matches() {
-        Ok(matches) => match matches.subcommand_matches(app.get_name()) {
-            // Called with arguments -> start user program
-            Some(m) => f(m),
-            // Called with no arguments -> start gui
-            None => {
-                let klask = Klask {
-                    state: AppState::new(&app),
-                    tab: Tab::Arguments,
-                    env: settings.enable_env.map(|desc| (desc, vec![])),
-                    stdin: settings
-                        .enable_stdin
-                        .map(|desc| (desc, StdinType::Text(String::new()))),
-                    working_dir: settings
-                        .enable_working_dir
-                        .map(|desc| (desc, String::new())),
-                    output: Output::None,
-                    app,
-                };
-                let native_options = eframe::NativeOptions::default();
-                eframe::run_native(Box::new(klask), native_options);
-            }
-        },
-        Err(err) => panic!(
-            "Internal error, arguments should've been empty or verified by the GUI app {:#?}",
-            err
-        ),
+    if std::env::var(CHILD_APP_ENV_VAR).is_ok() {
+        std::env::remove_var(CHILD_APP_ENV_VAR);
+
+        let matches = app
+            .try_get_matches()
+            .expect("Internal error, arguments should've been verified by the GUI app");
+
+        f(&matches)
+    } else {
+        // During validation we don't pass in a binary name
+        let app = app.setting(clap::AppSettings::NoBinaryName);
+
+        let klask = Klask {
+            state: AppState::new(&app),
+            tab: Tab::Arguments,
+            env: settings.enable_env.map(|desc| (desc, vec![])),
+            stdin: settings
+                .enable_stdin
+                .map(|desc| (desc, StdinType::Text(String::new()))),
+            working_dir: settings
+                .enable_working_dir
+                .map(|desc| (desc, String::new())),
+            output: Output::None,
+            app,
+        };
+        let native_options = eframe::NativeOptions::default();
+        eframe::run_native(Box::new(klask), native_options);
     }
 }
 
@@ -249,8 +250,7 @@ impl epi::App for Klask {
 
 impl Klask {
     fn try_start_execution(&mut self) -> Result<ChildApp, ExecutionError> {
-        let args = vec![self.app.get_name().to_string()];
-        let args = self.state.get_cmd_args(args)?;
+        let args = self.state.get_cmd_args(vec![])?;
 
         // Check for validation errors
         self.app.try_get_matches_from_mut(args.iter())?;
