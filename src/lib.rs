@@ -40,7 +40,7 @@ use eframe::{
     egui::{self, style::Spacing, Button, Color32, CtxRef, Grid, Style, TextEdit, Ui},
     epi,
 };
-use error::ExecuteError;
+use error::ExecutionError;
 use native_dialog::FileDialog;
 
 use output::Output;
@@ -75,7 +75,6 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
                     working_dir: settings
                         .enable_working_dir
                         .map(|desc| (desc, String::new())),
-                    child: None,
                     output: Output::None,
                     app,
                 };
@@ -127,7 +126,6 @@ struct Klask {
     stdin: Option<(String, StdinType)>,
     /// First string is a description
     working_dir: Option<(String, String)>,
-    child: Option<ChildApp>,
     output: Output,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
@@ -215,23 +213,15 @@ impl epi::App for Klask {
                             Ok(child) => {
                                 // Reset
                                 self.state.update_validation_error("", "");
-                                self.child = Some(child);
-                                self.output = Output::Output(vec![]);
+                                self.output = Output::new_with_child(child);
                             }
                             Err(err) => {
-                                if let ExecuteError::ValidationError { name, message } = &err {
+                                if let ExecutionError::ValidationError { name, message } = &err {
                                     self.state.update_validation_error(name, message);
                                 }
-
                                 self.output = Output::Err(err);
                             }
                         }
-                    }
-
-                    if matches!(self.output, Output::Output(_))
-                        && ui.button("Copy output").clicked()
-                    {
-                        ctx.output().copied_text = self.output.to_string();
                     }
 
                     if self.is_child_running() && ui.button("Kill").clicked() {
@@ -247,10 +237,6 @@ impl epi::App for Klask {
                     }
                 });
 
-                if let Some(child) = &mut self.child {
-                    self.output.append_child_output(&child.read());
-                }
-
                 ui.add(&mut self.output);
             });
         });
@@ -259,19 +245,15 @@ impl epi::App for Klask {
     fn setup(&mut self, ctx: &CtxRef, _: &mut epi::Frame<'_>, _: Option<&dyn epi::Storage>) {
         ctx.set_style(Klask::klask_style());
     }
-
-    fn on_exit(&mut self) {
-        self.kill_child()
-    }
 }
 
 impl Klask {
-    fn try_start_execution(&mut self) -> Result<ChildApp, ExecuteError> {
+    fn try_start_execution(&mut self) -> Result<ChildApp, ExecutionError> {
         let args = vec![self.app.get_name().to_string()];
         let args = self.state.get_cmd_args(args)?;
 
         // Check for validation errors
-        self.app.clone().try_get_matches_from(args.iter())?;
+        self.app.try_get_matches_from_mut(args.iter())?;
 
         if self
             .env
@@ -291,15 +273,15 @@ impl Klask {
     }
 
     fn kill_child(&mut self) {
-        if let Some(child) = &mut self.child {
+        if let Output::Output(child, _) = &mut self.output {
             child.kill();
         }
     }
 
     fn is_child_running(&self) -> bool {
-        match &self.child {
-            Some(child) => child.is_running(),
-            None => false,
+        match &self.output {
+            Output::Output(child, _) => child.is_running(),
+            _ => false,
         }
     }
 

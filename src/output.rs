@@ -1,9 +1,9 @@
-use crate::error::ExecuteError;
+use crate::child_app::ChildApp;
+use crate::error::ExecutionError;
 use cansi::{CategorisedSlice, Color};
 use eframe::egui::{vec2, Color32, Label, ProgressBar, Ui, Widget};
 use linkify::{LinkFinder, LinkKind};
 use std::collections::hash_map::DefaultHasher;
-use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
 /// Displays a progress bar in the output. First call creates
@@ -56,48 +56,13 @@ pub fn progress_bar_with_id(id: impl Hash, description: &str, value: f32) {
 #[derive(Debug)]
 pub(crate) enum Output {
     None,
-    Err(ExecuteError),
-    Output(Vec<(u64, OutputType)>),
+    Err(ExecutionError),
+    Output(ChildApp, Vec<(u64, OutputType)>),
 }
 
 impl Output {
-    pub fn append_child_output(&mut self, str: &str) {
-        if !matches!(self, Output::Output(_)) {
-            *self = Output::Output(vec![]);
-        }
-
-        let output = match self {
-            Output::Output(output) => output,
-            _ => unreachable!(),
-        };
-
-        let mut iter = str.split(MAGIC);
-
-        if let Some(text) = iter.next() {
-            if !text.is_empty() {
-                output.push((0, OutputType::Text(text.to_string())))
-            }
-        }
-
-        while let Some(id) = iter.next() {
-            if let Ok(id) = id.parse() {
-                if let Some(new) = OutputType::parse(&mut iter) {
-                    if let Some((_, exists)) = output.iter_mut().find(|(i, _)| *i == id) {
-                        *exists = new;
-                    } else {
-                        output.push((id, new));
-                    }
-                }
-            }
-
-            if let Some(text) = iter.next() {
-                // Get rid of the newline
-                let text = &text[1..];
-                if !text.is_empty() {
-                    output.push((0, OutputType::Text(text.to_string())))
-                }
-            }
-        }
+    pub fn new_with_child(child: ChildApp) -> Self {
+        Self::Output(child, vec![])
     }
 }
 
@@ -106,8 +71,51 @@ impl Widget for &mut Output {
         match self {
             Output::None => ui.vertical(|_| {}).response,
             Output::Err(err) => ui.colored_label(Color32::RED, err.to_string()),
-            Output::Output(output) => {
+            Output::Output(child, output) => {
+                // Update
+                let str = child.read();
+                let mut iter = str.split(MAGIC);
+
+                if let Some(text) = iter.next() {
+                    if !text.is_empty() {
+                        output.push((0, OutputType::Text(text.to_string())))
+                    }
+                }
+
+                while let Some(id) = iter.next() {
+                    if let Ok(id) = id.parse() {
+                        if let Some(new) = OutputType::parse(&mut iter) {
+                            if let Some((_, exists)) = output.iter_mut().find(|(i, _)| *i == id) {
+                                *exists = new;
+                            } else {
+                                output.push((id, new));
+                            }
+                        }
+                    }
+
+                    if let Some(text) = iter.next() {
+                        // Get rid of the newline
+                        let text = &text[1..];
+                        if !text.is_empty() {
+                            output.push((0, OutputType::Text(text.to_string())))
+                        }
+                    }
+                }
+
+                // View
                 ui.vertical(|ui| {
+                    if ui.button("Copy output").clicked() {
+                        ui.ctx().output().copied_text = output
+                            .iter()
+                            .map(|(_, o)| match o {
+                                OutputType::Text(text) => text,
+                                OutputType::ProgressBar(text, _) => text,
+                            })
+                            .flat_map(|text| cansi::categorise_text(text))
+                            .map(|slice| slice.text)
+                            .collect::<String>();
+                    }
+
                     for (_, o) in output {
                         match o {
                             OutputType::Text(ref text) => format_output(ui, text),
@@ -132,28 +140,6 @@ impl Widget for &mut Output {
 pub(crate) enum OutputType {
     Text(String),
     ProgressBar(String, f32),
-}
-
-impl Display for Output {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Output::None => write!(f, ""),
-            Output::Err(err) => write!(f, "{}", err),
-            Output::Output(output) => {
-                let s = output
-                    .iter()
-                    .map(|(_, o)| match o {
-                        OutputType::Text(text) => text,
-                        OutputType::ProgressBar(text, _) => text,
-                    })
-                    .flat_map(|text| cansi::categorise_text(text))
-                    .map(|slice| slice.text)
-                    .collect::<String>();
-
-                write!(f, "{}", s)
-            }
-        }
-    }
 }
 
 /// Unicode non-character. Used for sending messages between GUI and user's program

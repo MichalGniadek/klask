@@ -1,7 +1,7 @@
 use inflector::Inflector;
 
 #[derive(Debug, thiserror::Error)]
-pub enum ExecuteError {
+pub enum ExecutionError {
     #[error("Internal io error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Internal error: no name in validation")]
@@ -16,7 +16,7 @@ pub enum ExecuteError {
     GuiError(String),
 }
 
-impl From<clap::Error> for ExecuteError {
+impl From<clap::Error> for ExecutionError {
     fn from(err: clap::Error) -> Self {
         match err.kind {
             clap::ErrorKind::ValueValidation => {
@@ -25,26 +25,26 @@ impl From<clap::Error> for ExecuteError {
                     .and_then(|(_, suffix)| suffix.split_once('>'))
                     .map(|(prefix, _)| prefix.to_sentence_case())
                 {
-                    ExecuteError::ValidationError {
+                    ExecutionError::ValidationError {
                         name,
                         message: err.info[2].clone(),
                     }
                 } else {
-                    ExecuteError::NoValidationName
+                    ExecutionError::NoValidationName
                 }
             }
-            _ => ExecuteError::MatchError(err),
+            _ => ExecutionError::MatchError(err),
         }
     }
 }
 
-impl From<String> for ExecuteError {
+impl From<String> for ExecutionError {
     fn from(str: String) -> Self {
         Self::GuiError(str)
     }
 }
 
-impl From<&str> for ExecuteError {
+impl From<&str> for ExecutionError {
     fn from(str: &str) -> Self {
         Self::GuiError(str.to_string())
     }
