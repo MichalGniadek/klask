@@ -43,6 +43,7 @@ use eframe::{
 use error::ExecuteError;
 use native_dialog::FileDialog;
 
+use output::Output;
 pub use settings::Settings;
 use std::hash::Hash;
 
@@ -74,7 +75,8 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
                     working_dir: settings
                         .enable_working_dir
                         .map(|desc| (desc, String::new())),
-                    output: None,
+                    child: None,
+                    output: Output::None,
                     app,
                 };
                 let native_options = eframe::NativeOptions::default();
@@ -125,7 +127,8 @@ struct Klask {
     stdin: Option<(String, StdinType)>,
     /// First string is a description
     working_dir: Option<(String, String)>,
-    output: Option<Result<ChildApp, ExecuteError>>,
+    child: Option<ChildApp>,
+    output: Output,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
     app: App<'static>,
@@ -208,26 +211,31 @@ impl epi::App for Klask {
                         .add(Button::new("Run!").enabled(!self.is_child_running()))
                         .clicked()
                     {
-                        let output = self.execute();
+                        match self.try_start_execution() {
+                            Ok(child) => {
+                                // Reset
+                                self.state.update_validation_error("", "");
+                                self.child = Some(child);
+                                self.output = Output::Output(vec![]);
+                            }
+                            Err(err) => {
+                                if let ExecuteError::ValidationError { name, message } = &err {
+                                    self.state.update_validation_error(name, message);
+                                }
 
-                        if let Err(ExecuteError::ValidationError { name, message }) = &output {
-                            self.state.update_validation_error(name, message);
-                        } else {
-                            // Reset
-                            self.state.update_validation_error("", "");
+                                self.output = Output::Err(err);
+                            }
                         }
+                    }
 
-                        self.output = Some(output);
+                    if matches!(self.output, Output::Output(_))
+                        && ui.button("Copy output").clicked()
+                    {
+                        ctx.output().copied_text = self.output.to_string();
                     }
 
                     if self.is_child_running() && ui.button("Kill").clicked() {
                         self.kill_child();
-                    }
-
-                    if let Some(Ok(child)) = &self.output {
-                        if ui.button("Copy output").clicked() {
-                            ctx.output().copied_text = child.output.get_output_string();
-                        }
                     }
 
                     if self.is_child_running() {
@@ -239,7 +247,11 @@ impl epi::App for Klask {
                     }
                 });
 
-                self.update_output(ui);
+                if let Some(child) = &mut self.child {
+                    self.output.append_child_output(&child.read());
+                }
+
+                ui.add(&mut self.output);
             });
         });
     }
@@ -254,8 +266,9 @@ impl epi::App for Klask {
 }
 
 impl Klask {
-    fn execute(&mut self) -> Result<ChildApp, ExecuteError> {
-        let args = self.state.get_cmd_args(vec![self.app.get_name().into()])?;
+    fn try_start_execution(&mut self) -> Result<ChildApp, ExecuteError> {
+        let args = vec![self.app.get_name().to_string()];
+        let args = self.state.get_cmd_args(args)?;
 
         // Check for validation errors
         self.app.clone().try_get_matches_from(args.iter())?;
@@ -277,26 +290,16 @@ impl Klask {
         )
     }
 
-    fn update_output(&mut self, ui: &mut Ui) {
-        match &mut self.output {
-            Some(Ok(c)) => c.read().update(ui),
-            Some(Err(err)) => {
-                ui.colored_label(Color32::RED, err.to_string());
-            }
-            _ => {}
-        }
-    }
-
     fn kill_child(&mut self) {
-        if let Some(Ok(child)) = &mut self.output {
+        if let Some(child) = &mut self.child {
             child.kill();
         }
     }
 
     fn is_child_running(&self) -> bool {
-        match &self.output {
-            Some(Ok(c)) => c.is_running(),
-            _ => false,
+        match &self.child {
+            Some(child) => child.is_running(),
+            None => false,
         }
     }
 
