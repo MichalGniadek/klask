@@ -59,7 +59,5 @@ pub enum InnerInnerSubcommand {
 }
 
 fn main() {
-    klask::run_derived::<Showcase, _>(Settings::default(), |o| {
-        println!("{:#?}", o);
-    });
+    klask::run_derived::<Showcase, _>(Settings::default(), |o| println!("{:#?}", o));
 }

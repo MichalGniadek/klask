@@ -1,6 +1,6 @@
-use crate::{arg_state::ArgState, ValidationErrorInfo};
+use crate::arg_state::ArgState;
 use clap::App;
-use eframe::egui::{Grid, Ui};
+use eframe::egui::{widgets::Widget, Grid, Response, Ui};
 use inflector::Inflector;
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -19,7 +19,7 @@ impl AppState {
         let args = app
             .get_arguments()
             .filter(|a| a.get_name() != "help" && a.get_name() != "version")
-            .map(ArgState::from)
+            .map(ArgState::new)
             .collect();
 
         let subcommands = app
@@ -39,44 +39,16 @@ impl AppState {
         }
     }
 
-    pub fn update(&mut self, ui: &mut Ui, validation_error: &mut Option<ValidationErrorInfo>) {
-        if let Some(ref about) = self.about {
-            ui.label(about);
-        }
-
-        // Even empty grid adds an empty line
-        if !self.args.is_empty() {
-            Grid::new(self.id)
-                .num_columns(2)
-                .striped(true)
-                .show(ui, |ui| {
-                    for arg in &mut self.args {
-                        arg.update(ui, validation_error);
-                        ui.end_row();
-                    }
-                });
-        }
-
-        ui.separator();
-
-        if !self.subcommands.is_empty() {
-            // It probably should be changed to wrapping when there are more than a few
-            ui.columns(self.subcommands.len(), |ui| {
-                for (i, name) in self.subcommands.keys().enumerate() {
-                    ui[i].selectable_value(
-                        &mut self.current,
-                        Some(name.clone()),
-                        name.to_sentence_case(),
-                    );
-                }
-            });
+    pub fn update_validation_error(&mut self, name: &str, message: &str) {
+        for arg in &mut self.args {
+            arg.update_validation_error(name, message);
         }
 
         if let Some(current) = &self.current {
             self.subcommands
                 .get_mut(current)
                 .unwrap()
-                .update(ui, validation_error);
+                .update_validation_error(name, message);
         }
     }
 
@@ -91,6 +63,49 @@ impl AppState {
         } else {
             Ok(args)
         }
+    }
+}
+
+impl Widget for &mut AppState {
+    fn ui(self, ui: &mut Ui) -> Response {
+        ui.vertical(|ui| {
+            if let Some(ref about) = self.about {
+                ui.label(about);
+            }
+
+            // Even empty grid adds an empty line
+            if !self.args.is_empty() {
+                Grid::new(self.id)
+                    .num_columns(2)
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for arg in &mut self.args {
+                            ui.add(arg);
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            ui.separator();
+
+            if !self.subcommands.is_empty() {
+                // It probably should be changed to wrapping when there are more than a few
+                ui.columns(self.subcommands.len(), |ui| {
+                    for (i, name) in self.subcommands.keys().enumerate() {
+                        ui[i].selectable_value(
+                            &mut self.current,
+                            Some(name.clone()),
+                            name.to_sentence_case(),
+                        );
+                    }
+                });
+            }
+
+            if let Some(current) = &self.current {
+                ui.add(self.subcommands.get_mut(current).unwrap());
+            }
+        })
+        .response
     }
 }
 

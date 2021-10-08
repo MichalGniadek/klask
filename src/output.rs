@@ -1,5 +1,7 @@
+use crate::child_app::ChildApp;
+use crate::error::ExecutionError;
 use cansi::{CategorisedSlice, Color};
-use eframe::egui::{vec2, Color32, Label, ProgressBar, Ui};
+use eframe::egui::{vec2, Color32, Label, ProgressBar, Ui, Widget};
 use linkify::{LinkFinder, LinkKind};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -52,76 +54,92 @@ pub fn progress_bar_with_id(id: impl Hash, description: &str, value: f32) {
 }
 
 #[derive(Debug)]
-pub(crate) struct Output(Vec<(u64, OutputType)>);
+pub(crate) enum Output {
+    None,
+    Err(ExecutionError),
+    Output(ChildApp, Vec<(u64, OutputType)>),
+}
+
+impl Output {
+    pub fn new_with_child(child: ChildApp) -> Self {
+        Self::Output(child, vec![])
+    }
+}
+
+impl Widget for &mut Output {
+    fn ui(self, ui: &mut Ui) -> eframe::egui::Response {
+        match self {
+            Output::None => ui.vertical(|_| {}).response,
+            Output::Err(err) => ui.colored_label(Color32::RED, err.to_string()),
+            Output::Output(child, output) => {
+                // Update
+                let str = child.read();
+                let mut iter = str.split(MAGIC);
+
+                if let Some(text) = iter.next() {
+                    if !text.is_empty() {
+                        output.push((0, OutputType::Text(text.to_string())))
+                    }
+                }
+
+                while let Some(id) = iter.next() {
+                    if let Ok(id) = id.parse() {
+                        if let Some(new) = OutputType::parse(&mut iter) {
+                            if let Some((_, exists)) = output.iter_mut().find(|(i, _)| *i == id) {
+                                *exists = new;
+                            } else {
+                                output.push((id, new));
+                            }
+                        }
+                    }
+
+                    if let Some(text) = iter.next() {
+                        // Get rid of the newline
+                        let text = &text[1..];
+                        if !text.is_empty() {
+                            output.push((0, OutputType::Text(text.to_string())))
+                        }
+                    }
+                }
+
+                // View
+                ui.vertical(|ui| {
+                    if ui.button("Copy output").clicked() {
+                        ui.ctx().output().copied_text = output
+                            .iter()
+                            .map(|(_, o)| match o {
+                                OutputType::Text(text) => text,
+                                OutputType::ProgressBar(text, _) => text,
+                            })
+                            .flat_map(|text| cansi::categorise_text(text))
+                            .map(|slice| slice.text)
+                            .collect::<String>();
+                    }
+
+                    for (_, o) in output {
+                        match o {
+                            OutputType::Text(ref text) => format_output(ui, text),
+                            OutputType::ProgressBar(ref mess, value) => {
+                                // Get rid of the ending newline
+                                ui.add(
+                                    ProgressBar::new(*value)
+                                        .text(&mess[..mess.len() - 1])
+                                        .animate(true),
+                                );
+                            }
+                        }
+                    }
+                })
+                .response
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(crate) enum OutputType {
     Text(String),
     ProgressBar(String, f32),
-}
-
-impl Output {
-    pub fn new() -> Self {
-        Self(vec![])
-    }
-
-    pub fn parse(&mut self, str: &str) {
-        let mut iter = str.split(MAGIC);
-
-        if let Some(text) = iter.next() {
-            if !text.is_empty() {
-                self.0.push((0, OutputType::Text(text.to_string())))
-            }
-        }
-
-        while let Some(id) = iter.next() {
-            if let Ok(id) = id.parse() {
-                if let Some(new) = OutputType::parse(&mut iter) {
-                    if let Some((_, exists)) = self.0.iter_mut().find(|(i, _)| *i == id) {
-                        *exists = new;
-                    } else {
-                        self.0.push((id, new));
-                    }
-                }
-            }
-
-            if let Some(text) = iter.next() {
-                // Get rid of the newline
-                let text = &text[1..];
-                if !text.is_empty() {
-                    self.0.push((0, OutputType::Text(text.to_string())))
-                }
-            }
-        }
-    }
-
-    pub fn get_output_string(&self) -> String {
-        self.0
-            .iter()
-            .map(|(_, o)| match o {
-                OutputType::Text(text) => text,
-                OutputType::ProgressBar(text, _) => text,
-            })
-            .flat_map(|text| cansi::categorise_text(text))
-            .map(|slice| slice.text)
-            .collect::<String>()
-    }
-
-    pub fn update(&mut self, ui: &mut Ui) {
-        for (_, o) in &mut self.0 {
-            match o {
-                OutputType::Text(ref text) => format_output(ui, text),
-                OutputType::ProgressBar(ref mess, value) => {
-                    // Get rid of the ending newline
-                    ui.add(
-                        ProgressBar::new(*value)
-                            .text(&mess[..mess.len() - 1])
-                            .animate(true),
-                    );
-                }
-            }
-        }
-    }
 }
 
 /// Unicode non-character. Used for sending messages between GUI and user's program

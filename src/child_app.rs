@@ -1,4 +1,4 @@
-use crate::{output::Output, ExecuteError};
+use crate::{ExecutionError, CHILD_APP_ENV_VAR};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
@@ -13,7 +13,6 @@ pub(crate) struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,
     stderr: Option<Receiver<Option<String>>>,
-    pub output: Output,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -28,10 +27,11 @@ impl ChildApp {
         env: Option<Vec<(String, String)>>,
         stdin: Option<StdinType>,
         working_dir: Option<String>,
-    ) -> Result<Self, ExecuteError> {
+    ) -> Result<Self, ExecutionError> {
         let mut child = Command::new(std::env::current_exe()?);
 
         child
+            .env(CHILD_APP_ENV_VAR, "")
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -49,10 +49,19 @@ impl ChildApp {
 
         let mut child = child.spawn()?;
 
-        let stdout =
-            Self::spawn_thread_reader(child.stdout.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
-        let stderr =
-            Self::spawn_thread_reader(child.stderr.take().ok_or(ExecuteError::NoStdoutOrStderr)?);
+        let stdout = Self::spawn_thread_reader(
+            child
+                .stdout
+                .take()
+                .ok_or(ExecutionError::NoStdoutOrStderr)?,
+        );
+
+        let stderr = Self::spawn_thread_reader(
+            child
+                .stderr
+                .take()
+                .ok_or(ExecutionError::NoStdoutOrStderr)?,
+        );
 
         if let Some(stdin) = stdin {
             let mut child_stdin = child.stdin.take().unwrap();
@@ -71,16 +80,14 @@ impl ChildApp {
             child,
             stdout: Some(stdout),
             stderr: Some(stderr),
-            output: Output::new(),
         })
     }
 
-    pub fn read(&mut self) -> &mut Output {
+    pub fn read(&mut self) -> String {
         let mut out = String::new();
         Self::read_stdio(&mut out, &mut self.stdout);
         Self::read_stdio(&mut out, &mut self.stderr);
-        self.output.parse(&out);
-        &mut self.output
+        out
     }
 
     pub fn is_running(&self) -> bool {
@@ -122,5 +129,11 @@ impl ChildApp {
                 }
             }
         }
+    }
+}
+
+impl Drop for ChildApp {
+    fn drop(&mut self) {
+        self.kill();
     }
 }
