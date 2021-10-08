@@ -13,6 +13,7 @@ Allows you to create a gui application automatically from clap (v3). Uses egui f
 - Combo boxes for arguments with only some values allowed
 - Subcommands
 - Optionally allow setting environment variables, stdin and working directory
+- Progress bars
 
 If you are using this library please contact me, I'm definitely interested!
 Create an Issue if you find any bugs or would like a feature added!

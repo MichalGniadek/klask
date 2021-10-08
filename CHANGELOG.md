@@ -1,5 +1,8 @@
-## Version #.#.#
+## Version 0.3.0
 - Optionally allow setting environment variables, stdin and working directory
+- Progress bars in the output!
+- You can now copy output
+- Internal improvements
 
 ## Version 0.2.3
 - Klask doesn't require nightly to compile!
