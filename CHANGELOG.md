@@ -1,3 +1,6 @@
+## Version 0.3.1
+- Pin `clap` version to "=3.0.0-beta.4"
+
 ## Version 0.3.0
 - Optionally allow setting environment variables, stdin and working directory
 - Progress bars in the output!
