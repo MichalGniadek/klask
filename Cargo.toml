@@ -1,6 +1,6 @@
 [package]
 name = "klask"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Michał Gniadek <mgniadek@interia.pl>"]
 edition = "2018"
 license = "MIT"
