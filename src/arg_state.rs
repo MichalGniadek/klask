@@ -51,7 +51,7 @@ impl ArgState {
                 .get_possible_values()
                 .unwrap_or_default()
                 .iter()
-                .map(|s| s.to_string())
+                .map(|v| v.get_name().to_string())
                 .collect();
 
             let multiple_values = arg.is_set(ArgSettings::MultipleValues);

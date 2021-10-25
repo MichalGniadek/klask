@@ -93,9 +93,9 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
 /// Can be used with a struct deriving [`clap::Clap`]. Call with a closure that contains the code that would normally be in `main`.
 /// It's just a wrapper over [`run_app`].
 /// ```no_run
-/// # use clap::{App, Arg, Clap};
+/// # use clap::{App, Arg, Parser};
 /// # use klask::Settings;
-/// #[derive(Clap)]
+/// #[derive(Parser)]
 /// struct Example {
 ///     #[clap(short)]
 ///     debug: bool,
