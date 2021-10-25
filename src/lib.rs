@@ -147,7 +147,7 @@ impl epi::App for Klask {
 
     fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::auto_sized().show(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
                 // Tab selection
                 let tab_count = 1
                     + if self.env.is_some() { 1 } else { 0 }
@@ -207,7 +207,7 @@ impl epi::App for Klask {
                 // Run button row
                 ui.horizontal(|ui| {
                     if ui
-                        .add(Button::new("Run!").enabled(!self.is_child_running()))
+                        .add_enabled(!self.is_child_running(), Button::new("Run!"))
                         .clicked()
                     {
                         match self.try_start_execution() {
