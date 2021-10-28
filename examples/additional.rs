@@ -1,9 +1,9 @@
 //! Showcases additional input options
-use clap::Clap;
+use clap::Parser;
 use klask::Settings;
 use std::io::{stdin, Read};
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Additional {
     /// Hides environment variables from output
     #[clap(long)]

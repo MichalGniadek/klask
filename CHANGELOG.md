@@ -1,3 +1,7 @@
+## Version 0.4.0
+- Update `clap` to `-beta.5`
+- Update `eframe` to `0.15.0`
+
 ## Version 0.3.1
 - Pin `clap` version to "=3.0.0-beta.4"
 

@@ -1,10 +1,10 @@
 use super::AppState;
 use crate::arg_state::{ArgKind, ArgState};
-use clap::{Clap, FromArgMatches, IntoApp, ValueHint};
+use clap::{FromArgMatches, IntoApp, Parser, ValueHint};
 use std::{fmt::Debug, path::PathBuf};
 use uuid::Uuid;
 
-#[derive(Debug, Clap, PartialEq, Eq)]
+#[derive(Debug, Parser, PartialEq, Eq)]
 struct Simple {
     #[clap(long)]
     single: String,
@@ -40,7 +40,7 @@ fn simple() {
     )
 }
 
-#[derive(Debug, Clap, PartialEq, Eq)]
+#[derive(Debug, Parser, PartialEq, Eq)]
 struct ForbidEmpty {
     #[clap(long, forbid_empty_values = true)]
     optional_no_empty1: Option<String>,
@@ -65,7 +65,7 @@ fn forbid_empty() {
     );
 }
 
-#[derive(Debug, Clap, PartialEq, Eq)]
+#[derive(Debug, Parser, PartialEq, Eq)]
 struct OptionalAndDefault {
     required: String,
     optional: Option<String>,
@@ -85,7 +85,7 @@ fn optional_and_default() {
     );
 }
 
-#[derive(Debug, Clap, PartialEq, Eq)]
+#[derive(Debug, Parser, PartialEq, Eq)]
 struct UseEquals {
     #[clap(long, require_equals = true)]
     long: String,
@@ -128,7 +128,7 @@ fn use_equals() {
     );
 }
 
-#[derive(Debug, Clap, PartialEq, Eq)]
+#[derive(Debug, Parser, PartialEq, Eq)]
 struct PanicUseEqualsPassMultipleValues {
     #[clap(long, require_equals = true)]
     multiple: Vec<String>,
@@ -145,7 +145,7 @@ fn panic_use_equals_pass_multiple_values() {
     )
 }
 
-#[derive(Debug, Clap, PartialEq, Eq)]
+#[derive(Debug, Parser, PartialEq, Eq)]
 struct DifferentMultipleValues {
     #[clap(long, require_equals = true)]
     multiple_equals_enter_one: Vec<String>,

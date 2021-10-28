@@ -1,7 +1,7 @@
-use clap::Clap;
+use clap::Parser;
 use klask::Settings;
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 struct Opts {
     #[clap(long)]
     opt1: Option<String>,

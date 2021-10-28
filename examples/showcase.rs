@@ -1,10 +1,10 @@
 //! Showcases clap parsing and different widgets
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use clap::{Clap, ValueHint};
+use clap::{Parser, ValueHint};
 use klask::Settings;
 use std::path::PathBuf;
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 #[clap(name = "App name")]
 /// Help is displayed at the top
 pub struct Showcase {
@@ -22,7 +22,7 @@ pub struct Showcase {
     subcommand: Subcommand,
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 pub enum Subcommand {
     /// Subcommands also display help
     SubcommandA {
@@ -36,7 +36,7 @@ pub enum Subcommand {
     SubcommandB {},
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 pub enum InnerSubcommand {
     InnerSubcommandA {
         #[clap(short, multiple_occurrences(true))]
@@ -51,7 +51,7 @@ pub enum InnerSubcommand {
     InnerSubcommandD,
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Parser)]
 pub enum InnerInnerSubcommand {
     /// About 2
     A,
