@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 struct Font {
-    /// Hides environment variables from output
     #[clap(long, value_hint = ValueHint::AnyPath)]
     文件路径: PathBuf,
 }
