@@ -37,7 +37,9 @@ use app_state::AppState;
 use child_app::{ChildApp, StdinType};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, style::Spacing, Button, Color32, CtxRef, Grid, Style, TextEdit, Ui},
+    egui::{
+        self, style::Spacing, Button, Color32, CtxRef, FontDefinitions, Grid, Style, TextEdit, Ui,
+    },
     epi,
 };
 use error::ExecutionError;
@@ -45,7 +47,7 @@ use native_dialog::FileDialog;
 
 use output::Output;
 pub use settings::Settings;
-use std::hash::Hash;
+use std::{borrow::Cow, hash::Hash};
 
 const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
 
@@ -84,6 +86,7 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
                 .map(|desc| (desc, String::new())),
             output: Output::None,
             app,
+            custom_font: settings.custom_font.map(Cow::from),
         };
         let native_options = eframe::NativeOptions::default();
         eframe::run_native(Box::new(klask), native_options);
@@ -131,6 +134,8 @@ struct Klask {
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
     app: App<'static>,
+
+    custom_font: Option<Cow<'static, [u8]>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -245,6 +250,27 @@ impl epi::App for Klask {
 
     fn setup(&mut self, ctx: &CtxRef, _: &mut epi::Frame<'_>, _: Option<&dyn epi::Storage>) {
         ctx.set_style(Klask::klask_style());
+
+        if let Some(custom_font) = self.custom_font.take() {
+            let mut fonts = FontDefinitions::default();
+            fonts
+                .font_data
+                .insert(String::from("custom_font"), custom_font);
+
+            fonts
+                .fonts_for_family
+                .get_mut(&egui::FontFamily::Proportional)
+                .expect("fonts_for_family should include FontFamily::Proportional")
+                .insert(0, String::from("custom_font"));
+
+            fonts
+                .fonts_for_family
+                .get_mut(&egui::FontFamily::Monospace)
+                .expect("fonts_for_family should include FontFamily::Monospace")
+                .push(String::from("custom_font"));
+
+            ctx.set_fonts(fonts);
+        }
     }
 }
 

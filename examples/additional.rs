@@ -22,6 +22,7 @@ fn main() {
         enable_stdin: Some("Additional stdin description!".into()),
         // You don't have to provide a description
         enable_working_dir: Some("".into()),
+        ..Default::default()
     };
 
     klask::run_derived::<Additional, _>(settings, |additional| {
