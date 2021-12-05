@@ -1,3 +1,6 @@
+## Version X.X.X
+- Add support for custom fonts
+
 ## Version 0.4.0
 - Update `clap` to `-beta.5`
 - Update `eframe` to `0.15.0`
