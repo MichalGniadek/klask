@@ -10,7 +10,7 @@ pub struct Settings {
     /// Pass an empty String for no description.
     pub enable_working_dir: Option<String>,
     /// Pass a custom font to be used in the GUI.
-    /// ```no_run
+    /// ```ignore
     /// let settings = Settings {
     ///     custom_font: Some(include_bytes!(r"FONT_PATH")),
     ///     ..Default::default()
