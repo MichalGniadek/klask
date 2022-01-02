@@ -1,6 +1,6 @@
 [package]
 name = "klask"
-version = "0.4.0"
+version = "1.0.0"
 authors = ["Michał Gniadek <mgniadek@interia.pl>"]
 edition = "2018"
 license = "MIT"
@@ -13,11 +13,11 @@ keywords = ["clap", "gui", "ui", "cli", "egui"]
 # in clap and clap_derive.
 [dependencies]
 Inflector = { version = "0.11.4", default-features = false }
-clap = { version = "=3.0.0-beta.5", default-features = false, features = [
+clap = { version = "3.0.0", default-features = false, features = [
     "std",
     "derive",
 ] }
-clap_derive = "=3.0.0-beta.5"
+clap_derive = "3.0.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 cansi = "2.1.1"
 eframe = { version = "0.15.0", default-features = false, features = [

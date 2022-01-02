@@ -23,6 +23,3 @@ Example gui:
 
 Generated from [miniserve](https://github.com/svenstaro/miniserve)'s app:
 ![image showcasing the gui](media/miniserve-2021-09-25.png)
-
-## Notes
-Version 0.3 of `klask` is compatible with `clap-beta.4` and version 0.4 is compatible with `clap-beta.5`.

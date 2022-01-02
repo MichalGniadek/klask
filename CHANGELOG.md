@@ -1,4 +1,5 @@
-## Version X.X.X
+## Version 1.0.0
+- Update `clap` to `3.0`!
 - Add support for custom fonts
 
 ## Version 0.4.0

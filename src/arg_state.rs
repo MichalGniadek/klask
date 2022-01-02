@@ -90,9 +90,9 @@ impl ArgState {
                 .map(|s| format!("--{}", s))
                 .or_else(|| arg.get_short().map(|c| format!("-{}", c))),
             desc: arg
-                .get_long_about()
+                .get_long_help()
                 .map(ToString::to_string)
-                .or_else(|| arg.get_about().map(ToString::to_string)),
+                .or_else(|| arg.get_help().map(ToString::to_string)),
             optional: !arg.is_set(ArgSettings::Required),
             use_equals: arg.is_set(ArgSettings::RequireEquals),
             forbid_empty: arg.is_set(ArgSettings::ForbidEmptyValues),
