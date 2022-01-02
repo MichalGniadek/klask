@@ -129,23 +129,6 @@ fn use_equals() {
 }
 
 #[derive(Debug, Parser, PartialEq, Eq)]
-struct PanicUseEqualsPassMultipleValues {
-    #[clap(long, require_equals = true)]
-    multiple: Vec<String>,
-}
-
-#[test]
-#[should_panic]
-fn panic_use_equals_pass_multiple_values() {
-    test_app(
-        |args| args[0].enter_multiple(["a", "b"]),
-        PanicUseEqualsPassMultipleValues {
-            multiple: vec!["a".into(), "b".into()],
-        },
-    )
-}
-
-#[derive(Debug, Parser, PartialEq, Eq)]
 struct DifferentMultipleValues {
     #[clap(long, require_equals = true)]
     multiple_equals_enter_one: Vec<String>,

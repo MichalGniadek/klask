@@ -1,4 +1,5 @@
 /// Settings for klask.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Settings {
     /// Pass None to disable. Pass Some with a description to enable.
     /// Pass an empty String for no description.
@@ -17,15 +18,4 @@ pub struct Settings {
     /// };
     ///```
     pub custom_font: Option<&'static [u8]>,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            enable_env: None,
-            enable_stdin: None,
-            enable_working_dir: None,
-            custom_font: None,
-        }
-    }
 }
