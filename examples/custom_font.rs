@@ -1,7 +1,7 @@
 //! Showcases custom fonts
 use clap::{Parser, ValueHint};
 use klask::Settings;
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 #[derive(Parser)]
 struct Font {
@@ -11,7 +11,7 @@ struct Font {
 
 fn main() {
     let settings = Settings {
-        custom_font: Some(include_bytes!(r"font/Lato-Bold.ttf")),
+        custom_font: Some(Cow::Borrowed(include_bytes!(r"font/Lato-Bold.ttf"))),
         ..Default::default()
     };
 

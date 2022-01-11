@@ -38,7 +38,8 @@ use child_app::{ChildApp, StdinType};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
     egui::{
-        self, style::Spacing, Button, Color32, CtxRef, FontDefinitions, Grid, Style, TextEdit, Ui,
+        self, style::Spacing, Button, Color32, CtxRef, FontData, FontDefinitions, Grid, Style,
+        TextEdit, Ui,
     },
     epi,
 };
@@ -86,7 +87,7 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
                 .map(|desc| (desc, String::new())),
             output: Output::None,
             app,
-            custom_font: settings.custom_font.map(Cow::from),
+            custom_font: settings.custom_font,
         };
         let native_options = eframe::NativeOptions::default();
         eframe::run_native(Box::new(klask), native_options);
@@ -150,7 +151,7 @@ impl epi::App for Klask {
         self.app.get_name()
     }
 
-    fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
+    fn update(&mut self, ctx: &CtxRef, _frame: &epi::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 // Tab selection
@@ -248,26 +249,32 @@ impl epi::App for Klask {
         });
     }
 
-    fn setup(&mut self, ctx: &CtxRef, _: &mut epi::Frame<'_>, _: Option<&dyn epi::Storage>) {
+    fn setup(&mut self, ctx: &CtxRef, _: &epi::Frame, _: Option<&dyn epi::Storage>) {
         ctx.set_style(Klask::klask_style());
 
         if let Some(custom_font) = self.custom_font.take() {
+            let font_name = String::from("custom_font");
             let mut fonts = FontDefinitions::default();
-            fonts
-                .font_data
-                .insert(String::from("custom_font"), custom_font);
+
+            fonts.font_data.insert(
+                font_name.clone(),
+                FontData {
+                    font: custom_font,
+                    index: 0,
+                },
+            );
 
             fonts
                 .fonts_for_family
-                .get_mut(&egui::FontFamily::Proportional)
-                .expect("fonts_for_family should include FontFamily::Proportional")
-                .insert(0, String::from("custom_font"));
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, font_name.clone());
 
             fonts
                 .fonts_for_family
-                .get_mut(&egui::FontFamily::Monospace)
-                .expect("fonts_for_family should include FontFamily::Monospace")
-                .push(String::from("custom_font"));
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .push(font_name);
 
             ctx.set_fonts(fonts);
         }

@@ -151,7 +151,7 @@ impl ArgState {
             })
         } else {
             ComboBox::from_id_source(id)
-                .selected_text(&value)
+                .selected_text(&*value)
                 .show_ui(ui, |ui| {
                     if optional {
                         ui.selectable_value(value, String::new(), "None");
@@ -361,7 +361,7 @@ impl Widget for &mut ArgState {
                     })
                     .response;
 
-                if let Some(message) = &mut self.validation_error {
+                if let Some(message) = &self.validation_error {
                     list = list.on_hover_text(message);
                     if list.changed() {
                         self.validation_error = None;

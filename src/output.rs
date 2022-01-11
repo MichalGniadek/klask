@@ -1,7 +1,7 @@
 use crate::child_app::ChildApp;
 use crate::error::ExecutionError;
 use cansi::{CategorisedSlice, Color};
-use eframe::egui::{vec2, Color32, Label, ProgressBar, Ui, Widget};
+use eframe::egui::{vec2, Color32, Label, ProgressBar, RichText, Ui, Widget};
 use linkify::{LinkFinder, LinkKind};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -208,33 +208,33 @@ fn format_output(ui: &mut Ui, text: &str) {
                         ui.hyperlink_to(span.as_str(), format!("mailto:{}", span.as_str()))
                     }
                     Some(_) | None => {
-                        let mut label = Label::new(span.as_str());
+                        let mut text = RichText::new(span.as_str());
 
-                        label = label.text_color(ansi_color_to_egui(fg_colour));
+                        text = text.color(ansi_color_to_egui(fg_colour));
 
                         if bg_colour != Color::Black {
-                            label = label.background_color(ansi_color_to_egui(bg_colour));
+                            text = text.background_color(ansi_color_to_egui(bg_colour));
                         }
 
                         if italic {
-                            label = label.italics();
+                            text = text.italics();
                         }
 
                         if underline {
-                            label = label.underline();
+                            text = text.underline();
                         }
 
                         if strikethrough {
-                            label = label.strikethrough();
+                            text = text.strikethrough();
                         }
 
-                        label = match intensity {
-                            cansi::Intensity::Normal => label,
-                            cansi::Intensity::Bold => label.strong(),
-                            cansi::Intensity::Faint => label.weak(),
+                        text = match intensity {
+                            cansi::Intensity::Normal => text,
+                            cansi::Intensity::Bold => text.strong(),
+                            cansi::Intensity::Faint => text.weak(),
                         };
 
-                        ui.add(label)
+                        ui.add(Label::new(text))
                     }
                 };
             }

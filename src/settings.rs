@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /// Settings for klask.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Settings {
@@ -13,9 +15,9 @@ pub struct Settings {
     /// Pass a custom font to be used in the GUI.
     /// ```ignore
     /// let settings = Settings {
-    ///     custom_font: Some(include_bytes!(r"FONT_PATH")),
+    ///     custom_font: Some(Cow::Borrowed(include_bytes!(r"FONT_PATH"))),
     ///     ..Default::default()
     /// };
     ///```
-    pub custom_font: Option<&'static [u8]>,
+    pub custom_font: Option<Cow<'static, [u8]>>,
 }
