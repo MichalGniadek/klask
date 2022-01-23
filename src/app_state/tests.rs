@@ -1,5 +1,8 @@
 use super::AppState;
-use crate::arg_state::{ArgKind, ArgState};
+use crate::{
+    arg_state::{ArgKind, ArgState},
+    settings::LocalizationSettings,
+};
 use clap::{FromArgMatches, IntoApp, Parser, ValueHint};
 use std::{fmt::Debug, path::PathBuf};
 use uuid::Uuid;
@@ -194,7 +197,8 @@ where
     F: FnOnce(&mut Vec<ArgState>),
 {
     let app = C::into_app();
-    let mut app_state = AppState::new(&app);
+    let localization = LocalizationSettings::default();
+    let mut app_state = AppState::new(&app, &localization);
     setup(&mut app_state.args);
     let args = app_state.get_cmd_args(vec!["_name".into()]).unwrap();
     eprintln!("Args: {:?}", &args[1..]);
@@ -209,7 +213,7 @@ fn enter_consecutive<const N: usize>(args: &mut Vec<ArgState>, vals: [&str; N]) 
     }
 }
 
-impl crate::arg_state::ArgState {
+impl crate::arg_state::ArgState<'_> {
     fn enter(&mut self, val: &str) {
         if let ArgKind::String { value, .. } = &mut self.kind {
             value.0 = val.to_string();

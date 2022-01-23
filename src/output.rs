@@ -57,12 +57,12 @@ pub fn progress_bar_with_id(id: impl Hash, description: &str, value: f32) {
 pub(crate) enum Output {
     None,
     Err(ExecutionError),
-    Output(ChildApp, Vec<(u64, OutputType)>),
+    Child(ChildApp, Vec<(u64, OutputType)>),
 }
 
 impl Output {
     pub fn new_with_child(child: ChildApp) -> Self {
-        Self::Output(child, vec![])
+        Self::Child(child, vec![])
     }
 }
 
@@ -71,7 +71,7 @@ impl Widget for &mut Output {
         match self {
             Output::None => ui.vertical(|_| {}).response,
             Output::Err(err) => ui.colored_label(Color32::RED, err.to_string()),
-            Output::Output(child, output) => {
+            Output::Child(child, output) => {
                 // Update
                 let str = child.read();
                 let mut iter = str.split(MAGIC);

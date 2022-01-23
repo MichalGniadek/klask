@@ -10,10 +10,8 @@ struct Font {
 }
 
 fn main() {
-    let settings = Settings {
-        custom_font: Some(Cow::Borrowed(include_bytes!(r"font/Lato-Bold.ttf"))),
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.custom_font = Some(Cow::Borrowed(include_bytes!(r"font/Lato-Bold.ttf")));
 
     klask::run_derived::<Font, _>(settings, |_| {});
 }

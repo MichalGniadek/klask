@@ -17,13 +17,10 @@ struct Additional {
 }
 
 fn main() {
-    let settings = Settings {
-        enable_env: Some("Additional env description!".into()),
-        enable_stdin: Some("Additional stdin description!".into()),
-        // You don't have to provide a description
-        enable_working_dir: Some("".into()),
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.enable_env = Some("Additional env description!".into());
+    settings.enable_stdin = Some("Additional stdin description!".into());
+    settings.enable_working_dir = Some("Additional working dir description!".into());
 
     klask::run_derived::<Additional, _>(settings, |additional| {
         if !additional.hide_environment_variables {

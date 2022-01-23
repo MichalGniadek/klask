@@ -47,7 +47,7 @@ use error::ExecutionError;
 use native_dialog::FileDialog;
 
 use output::Output;
-pub use settings::Settings;
+pub use settings::{LocalizationSettings, Settings};
 use std::{borrow::Cow, hash::Hash};
 
 const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
@@ -75,8 +75,13 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
         // During validation we don't pass in a binary name
         let app = app.setting(clap::AppSettings::NoBinaryName);
 
+        // eframe::run_native requires that Box::new(klask) has 'static
+        // lifetime, so we must leak here. But it never returns (return value !)
+        // so it should be ok.
+        let localization = Box::leak(Box::new(settings.localization));
+
         let klask = Klask {
-            state: AppState::new(&app),
+            state: AppState::new(&app, localization),
             tab: Tab::Arguments,
             env: settings.enable_env.map(|desc| (desc, vec![])),
             stdin: settings
@@ -88,6 +93,7 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
             output: Output::None,
             app,
             custom_font: settings.custom_font,
+            localization,
         };
         let native_options = eframe::NativeOptions::default();
         eframe::run_native(Box::new(klask), native_options);
@@ -122,8 +128,8 @@ where
 }
 
 #[derive(Debug)]
-struct Klask {
-    state: AppState,
+struct Klask<'s> {
+    state: AppState<'s>,
     tab: Tab,
     /// First string is a description
     env: Option<(String, Vec<(String, String)>)>,
@@ -137,6 +143,7 @@ struct Klask {
     app: App<'static>,
 
     custom_font: Option<Cow<'static, [u8]>>,
+    localization: &'s LocalizationSettings,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -146,7 +153,7 @@ enum Tab {
     Stdin,
 }
 
-impl epi::App for Klask {
+impl epi::App for Klask<'_> {
     fn name(&self) -> &str {
         self.app.get_name()
     }
@@ -163,19 +170,27 @@ impl epi::App for Klask {
                     ui.columns(tab_count, |ui| {
                         let mut index = 0;
 
-                        ui[index].selectable_value(&mut self.tab, Tab::Arguments, "Arguments");
+                        ui[index].selectable_value(
+                            &mut self.tab,
+                            Tab::Arguments,
+                            &self.localization.arguments,
+                        );
                         index += 1;
 
                         if self.env.is_some() {
                             ui[index].selectable_value(
                                 &mut self.tab,
                                 Tab::Env,
-                                "Environment variables",
+                                &self.localization.env_variables,
                             );
                             index += 1;
                         }
                         if self.stdin.is_some() {
-                            ui[index].selectable_value(&mut self.tab, Tab::Stdin, "Input");
+                            ui[index].selectable_value(
+                                &mut self.tab,
+                                Tab::Stdin,
+                                &self.localization.input,
+                            );
                         }
                     });
 
@@ -193,15 +208,19 @@ impl epi::App for Klask {
                                 ui.label(desc);
                             }
 
+                            let localization = self.localization;
                             ui.horizontal(|ui| {
-                                if ui.button("Select directory...").clicked() {
+                                if ui.button(&localization.select_directory).clicked() {
                                     if let Some(file) =
                                         FileDialog::new().show_open_single_dir().ok().flatten()
                                     {
                                         *path = file.to_string_lossy().into_owned();
                                     }
                                 }
-                                ui.add(TextEdit::singleline(path).hint_text("Working directory"))
+                                ui.add(
+                                    TextEdit::singleline(path)
+                                        .hint_text(&localization.working_directory),
+                                )
                             });
                             ui.add_space(10.0);
                         }
@@ -213,7 +232,10 @@ impl epi::App for Klask {
                 // Run button row
                 ui.horizontal(|ui| {
                     if ui
-                        .add_enabled(!self.is_child_running(), Button::new("Run!"))
+                        .add_enabled(
+                            !self.is_child_running(),
+                            Button::new(&self.localization.run),
+                        )
                         .clicked()
                     {
                         match self.try_start_execution() {
@@ -231,12 +253,12 @@ impl epi::App for Klask {
                         }
                     }
 
-                    if self.is_child_running() && ui.button("Kill").clicked() {
+                    if self.is_child_running() && ui.button(&self.localization.kill).clicked() {
                         self.kill_child();
                     }
 
                     if self.is_child_running() {
-                        let mut running_text = String::from("Running");
+                        let mut running_text = String::from(&self.localization.running);
                         for _ in 0..((2.0 * ui.input().time) as i32 % 4) {
                             running_text.push('.')
                         }
@@ -281,7 +303,7 @@ impl epi::App for Klask {
     }
 }
 
-impl Klask {
+impl Klask<'_> {
     fn try_start_execution(&mut self) -> Result<ChildApp, ExecutionError> {
         let args = self.state.get_cmd_args(vec![])?;
 
@@ -294,7 +316,11 @@ impl Klask {
             .and_then(|(_, v)| v.iter().find(|(key, _)| key.is_empty()))
             .is_some()
         {
-            return Err("Environment variable can't be empty".into());
+            return Err(self
+                .localization
+                .error_env_var_cant_be_empty
+                .as_str()
+                .into());
         }
 
         ChildApp::run(
@@ -306,14 +332,14 @@ impl Klask {
     }
 
     fn kill_child(&mut self) {
-        if let Output::Output(child, _) = &mut self.output {
+        if let Output::Child(child, _) = &mut self.output {
             child.kill();
         }
     }
 
     fn is_child_running(&self) -> bool {
         match &self.output {
-            Output::Output(child, _) => child.is_running(),
+            Output::Child(child, _) => child.is_running(),
             _ => false,
         }
     }
@@ -366,7 +392,7 @@ impl Klask {
             }
         }
 
-        if ui.button("New").clicked() {
+        if ui.button(&self.localization.new_value).clicked() {
             env.push(Default::default());
         }
 
@@ -380,16 +406,18 @@ impl Klask {
             ui.label(desc);
         }
 
+        let localization = &self.localization;
+
         ui.columns(2, |ui| {
             if ui[0]
-                .selectable_label(matches!(stdin, StdinType::Text(_)), "Text")
+                .selectable_label(matches!(stdin, StdinType::Text(_)), &localization.text)
                 .clicked()
                 && matches!(stdin, StdinType::File(_))
             {
                 *stdin = StdinType::Text(String::new());
             }
             if ui[1]
-                .selectable_label(matches!(stdin, StdinType::File(_)), "File")
+                .selectable_label(matches!(stdin, StdinType::File(_)), &localization.file)
                 .clicked()
                 && matches!(stdin, StdinType::Text(_))
             {
@@ -400,7 +428,7 @@ impl Klask {
         match stdin {
             StdinType::File(path) => {
                 ui.horizontal(|ui| {
-                    if ui.button("Select file...").clicked() {
+                    if ui.button(&localization.select_file).clicked() {
                         if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
                         {
                             *path = file.to_string_lossy().into_owned();

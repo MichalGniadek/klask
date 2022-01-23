@@ -1,4 +1,4 @@
-use crate::Klask;
+use crate::{settings::LocalizationSettings, Klask};
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{widgets::Widget, ComboBox, Response, TextEdit, Ui};
 use inflector::Inflector;
@@ -6,7 +6,7 @@ use native_dialog::FileDialog;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
-pub struct ArgState {
+pub struct ArgState<'s> {
     pub name: String,
     pub call_name: Option<String>,
     pub desc: Option<String>,
@@ -15,6 +15,7 @@ pub struct ArgState {
     pub forbid_empty: bool,
     pub kind: ArgKind,
     pub validation_error: Option<String>,
+    pub localization: &'s LocalizationSettings,
 }
 
 #[derive(Debug, Clone)]
@@ -39,8 +40,8 @@ pub enum ArgKind {
     Bool(bool),
 }
 
-impl ArgState {
-    pub fn new(arg: &Arg) -> Self {
+impl<'s> ArgState<'s> {
+    pub fn new(arg: &Arg, localization: &'s LocalizationSettings) -> Self {
         let kind = if arg.is_set(ArgSettings::TakesValue) {
             let mut default = arg
                 .get_default_values()
@@ -98,6 +99,7 @@ impl ArgState {
             forbid_empty: arg.is_set(ArgSettings::ForbidEmptyValues),
             kind,
             validation_error: None,
+            localization,
         }
     }
 
@@ -113,6 +115,7 @@ impl ArgState {
         value_hint: ValueHint,
         optional: bool,
         validation_error: bool,
+        localization: &'s LocalizationSettings,
     ) -> Response {
         let is_error = (!optional && value.is_empty()) || validation_error;
         if is_error {
@@ -124,7 +127,7 @@ impl ArgState {
                 if matches!(
                     value_hint,
                     ValueHint::AnyPath | ValueHint::FilePath | ValueHint::ExecutablePath
-                ) && ui.button("Select file...").clicked()
+                ) && ui.button(&localization.select_file).clicked()
                 {
                     if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten() {
                         *value = file.to_string_lossy().into_owned();
@@ -132,7 +135,7 @@ impl ArgState {
                 }
 
                 if matches!(value_hint, ValueHint::AnyPath | ValueHint::DirPath)
-                    && ui.button("Select directory...").clicked()
+                    && ui.button(&localization.select_directory).clicked()
                 {
                     if let Some(file) = FileDialog::new().show_open_single_dir().ok().flatten() {
                         *value = file.to_string_lossy().into_owned();
@@ -142,7 +145,7 @@ impl ArgState {
                 ui.add(
                     TextEdit::singleline(value).hint_text(match (default, optional) {
                         (Some(default), _) => default.as_str(),
-                        (_, true) => "(Optional)",
+                        (_, true) => localization.optional.as_str(),
                         (_, false) => "",
                     }),
                 );
@@ -185,7 +188,12 @@ impl ArgState {
                         args.push(value.clone());
                     }
                 } else if !self.optional {
-                    return Err(format!("{} is required.", self.name));
+                    return Err(format!(
+                        "{}{}{}",
+                        self.localization.error_is_required.0,
+                        self.name,
+                        self.localization.error_is_required.1
+                    ));
                 }
             }
             ArgKind::MultipleStrings {
@@ -278,8 +286,9 @@ impl ArgState {
     }
 }
 
-impl Widget for &mut ArgState {
+impl Widget for &mut ArgState<'_> {
     fn ui(self, ui: &mut Ui) -> eframe::egui::Response {
+        let localization = self.localization;
         let label = ui.label(&self.name);
 
         if let Some(desc) = &self.desc {
@@ -304,6 +313,7 @@ impl Widget for &mut ArgState {
                 *value_hint,
                 self.optional && !self.forbid_empty,
                 is_validation_error,
+                localization,
             ),
             ArgKind::MultipleStrings {
                 values,
@@ -331,6 +341,7 @@ impl Widget for &mut ArgState {
                                     *value_hint,
                                     !forbid_empty,
                                     is_validation_error,
+                                    localization,
                                 );
                             });
                         }
@@ -340,14 +351,14 @@ impl Widget for &mut ArgState {
                         }
 
                         ui.horizontal(|ui| {
-                            if ui.button("New value").clicked() {
+                            if ui.button(&localization.new_value).clicked() {
                                 values.push(("".into(), Uuid::new_v4()));
                             }
 
                             let text = if default.is_empty() {
-                                "Reset"
+                                &localization.reset
                             } else {
-                                "Reset to default"
+                                &localization.reset_to_default
                             };
 
                             ui.add_space(20.0);

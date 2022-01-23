@@ -1,4 +1,4 @@
-use crate::arg_state::ArgState;
+use crate::{arg_state::ArgState, settings::LocalizationSettings};
 use clap::App;
 use eframe::egui::{widgets::Widget, Grid, Response, Ui};
 use inflector::Inflector;
@@ -6,25 +6,25 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
-pub struct AppState {
+pub struct AppState<'s> {
     id: Uuid,
     about: Option<String>,
-    args: Vec<ArgState>,
-    subcommands: BTreeMap<String, AppState>,
+    args: Vec<ArgState<'s>>,
+    subcommands: BTreeMap<String, AppState<'s>>,
     current: Option<String>,
 }
 
-impl AppState {
-    pub fn new(app: &App) -> Self {
+impl<'s> AppState<'s> {
+    pub fn new(app: &App, localization: &'s LocalizationSettings) -> Self {
         let args = app
             .get_arguments()
             .filter(|a| a.get_name() != "help" && a.get_name() != "version")
-            .map(ArgState::new)
+            .map(|a| ArgState::new(a, localization))
             .collect();
 
         let subcommands = app
             .get_subcommands()
-            .map(|app| (app.get_name().to_string(), AppState::new(app)))
+            .map(|app| (app.get_name().to_string(), AppState::new(app, localization)))
             .collect();
 
         AppState {
@@ -66,7 +66,7 @@ impl AppState {
     }
 }
 
-impl Widget for &mut AppState {
+impl Widget for &mut AppState<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         ui.vertical(|ui| {
             if let Some(ref about) = self.about {
