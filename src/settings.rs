@@ -1,6 +1,7 @@
 // Structs are marked as `#[non_exhaustive]` to allow
 // to add other optionas alter withour breaking compatibility.
 
+use eframe::egui::{self, style::Spacing, Style};
 use std::borrow::Cow;
 
 /// Settings for klask.
@@ -10,7 +11,7 @@ use std::borrow::Cow;
 /// let mut settings = Settings::default();
 /// settings.enable_env = Some("Description".into());
 /// ```
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Settings {
     /// Pass None to disable. Pass Some with a description to enable.
@@ -31,6 +32,29 @@ pub struct Settings {
 
     /// Override builtin strings. By default everything is in english.
     pub localization: LocalizationSettings,
+
+    /// Egui style used in GUI.
+    pub style: Style,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            enable_env: Default::default(),
+            enable_stdin: Default::default(),
+            enable_working_dir: Default::default(),
+            custom_font: Default::default(),
+            localization: Default::default(),
+            style: Style {
+                spacing: Spacing {
+                    text_edit_width: f32::MAX,
+                    item_spacing: egui::vec2(8.0, 8.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        }
+    }
 }
 
 /// Localization for builtin strings.

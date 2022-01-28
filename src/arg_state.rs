@@ -107,6 +107,7 @@ impl<'s> ArgState<'s> {
         self.validation_error = (self.name == name).then(|| message.to_string());
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn ui_single_row(
         ui: &mut Ui,
         (value, id): &mut (String, Uuid),
@@ -119,7 +120,7 @@ impl<'s> ArgState<'s> {
     ) -> Response {
         let is_error = (!optional && value.is_empty()) || validation_error;
         if is_error {
-            ui.set_style(Klask::error_style());
+            Klask::set_error_style(ui);
         }
 
         let inner_response = if possible.is_empty() {
@@ -166,7 +167,7 @@ impl<'s> ArgState<'s> {
         };
 
         if is_error {
-            ui.set_style(Klask::klask_style());
+            ui.reset_style();
         }
 
         inner_response.response

@@ -37,10 +37,7 @@ use app_state::AppState;
 use child_app::{ChildApp, StdinType};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{
-        self, style::Spacing, Button, Color32, CtxRef, FontData, FontDefinitions, Grid, Style,
-        TextEdit, Ui,
-    },
+    egui::{self, Button, Color32, CtxRef, FontData, FontDefinitions, Grid, Style, TextEdit, Ui},
     epi,
 };
 use error::ExecutionError;
@@ -94,6 +91,7 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
             app,
             custom_font: settings.custom_font,
             localization,
+            style: settings.style,
         };
         let native_options = eframe::NativeOptions::default();
         eframe::run_native(Box::new(klask), native_options);
@@ -144,6 +142,7 @@ struct Klask<'s> {
 
     custom_font: Option<Cow<'static, [u8]>>,
     localization: &'s LocalizationSettings,
+    style: Style,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -272,7 +271,7 @@ impl epi::App for Klask<'_> {
     }
 
     fn setup(&mut self, ctx: &CtxRef, _: &epi::Frame, _: Option<&dyn epi::Storage>) {
-        ctx.set_style(Klask::klask_style());
+        ctx.set_style(self.style.clone());
 
         if let Some(custom_font) = self.custom_font.take() {
             let font_name = String::from("custom_font");
@@ -368,13 +367,13 @@ impl Klask<'_> {
                             }
 
                             if key.is_empty() {
-                                ui.set_style(Klask::error_style());
+                                Klask::set_error_style(ui);
                             }
 
                             ui.text_edit_singleline(key);
 
                             if key.is_empty() {
-                                ui.set_style(Klask::klask_style());
+                                ui.reset_style();
                             }
                         });
 
@@ -443,19 +442,8 @@ impl Klask<'_> {
         };
     }
 
-    fn klask_style() -> Style {
-        Style {
-            spacing: Spacing {
-                text_edit_width: f32::MAX,
-                item_spacing: egui::vec2(8.0, 8.0),
-                ..Default::default()
-            },
-            ..Default::default()
-        }
-    }
-
-    fn error_style() -> Style {
-        let mut style = Self::klask_style();
+    fn set_error_style(ui: &mut Ui) {
+        let mut style = ui.style_mut();
         style.visuals.widgets.inactive.bg_stroke.color = Color32::RED;
         style.visuals.widgets.inactive.bg_stroke.width = 1.0;
         style.visuals.widgets.hovered.bg_stroke.color = Color32::RED;
@@ -463,6 +451,5 @@ impl Klask<'_> {
         style.visuals.widgets.open.bg_stroke.color = Color32::RED;
         style.visuals.widgets.noninteractive.bg_stroke.color = Color32::RED;
         style.visuals.selection.stroke.color = Color32::RED;
-        style
     }
 }

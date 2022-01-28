@@ -1,6 +1,7 @@
 ## Version X.X.X
 - Added localization settings
-- Added `#[non_exhaustive]` to setting so adding new ones won't be a breaking change.
+- Added style settings, for setting egui styling
+- Added `#[non_exhaustive]` to setting so adding new ones won't be a breaking change
 
 ## Version 1.0.0
 - Update `clap` to `3.0`!
