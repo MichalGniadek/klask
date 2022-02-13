@@ -5,13 +5,15 @@ use eframe::egui::{vec2, Color32, Label, ProgressBar, RichText, Ui, Widget};
 use linkify::{LinkFinder, LinkKind};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 
 /// Displays a progress bar in the output. First call creates
 /// a progress bar and future calls update it.
 ///
 /// Value is a f32 between 0 and 1.
 ///
-/// If the description is not static, use [`progress_bar_with_id`].
+/// If the description is not static or you need to use the same description
+/// multiple times, use [`progress_bar_with_id`].
 /// ```no_run
 /// # use clap::{App, Arg};
 /// # use klask::Settings;
@@ -144,11 +146,14 @@ pub(crate) enum OutputType {
 
 /// Unicode non-character. Used for sending messages between GUI and user's program
 const MAGIC: char = '\u{5FFFE}';
+
 fn send_message(data: &[&str]) {
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
     for d in data {
-        print!("{}{}", MAGIC, d);
+        write!(&mut lock, "{}{}", MAGIC, d).unwrap();
     }
-    println!("{}", MAGIC);
+    writeln!(&mut lock, "{}", MAGIC).unwrap();
 }
 
 impl OutputType {
