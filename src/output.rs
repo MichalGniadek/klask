@@ -177,10 +177,7 @@ impl OutputType {
             // Add a newline here for copying out text
             Some(Self::PROGRESS_BAR_STR) => Some(Self::ProgressBar(
                 format!("{}\n", iter.next().unwrap_or_default()),
-                iter.next()
-                    .map(|s| s.parse().ok())
-                    .flatten()
-                    .unwrap_or_default(),
+                iter.next().and_then(|s| s.parse().ok()).unwrap_or_default(),
             )),
             None => None,
             _ => panic!(),
