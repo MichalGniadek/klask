@@ -11,12 +11,12 @@ keywords = ["clap", "gui", "ui", "cli", "egui"]
 
 [dependencies]
 Inflector = { version = "0.11.4", default-features = false }
-clap = { version = "=3.0.0", default-features = false, features = [
+clap = { version = "3", default-features = false, features = [
     "std",
     "derive",
     "unicode",
 ] }
-clap_derive = { version = "=3.0.0" }
+clap_derive = { version = "3" }
 uuid = { version = "0.8.2", features = ["v4"] }
 cansi = "2.1.1"
 eframe = { version = "0.16.0", default-features = false, features = [
