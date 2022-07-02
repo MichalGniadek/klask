@@ -35,7 +35,7 @@ mod settings;
 
 use app_state::AppState;
 use child_app::{ChildApp, StdinType};
-use clap::{App, ArgMatches, FromArgMatches, IntoApp};
+use clap::{ArgMatches, Command, FromArgMatches, IntoApp};
 use eframe::{
     egui::{self, Button, Color32, CtxRef, FontData, FontDefinitions, Grid, Style, TextEdit, Ui},
     epi,
@@ -59,7 +59,7 @@ const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
 ///    println!("{}", matches.is_present("debug"))
 /// });
 /// ```
-pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches)) {
+pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMatches)) {
     if std::env::var(CHILD_APP_ENV_VAR).is_ok() {
         std::env::remove_var(CHILD_APP_ENV_VAR);
 
@@ -118,7 +118,7 @@ where
     C: IntoApp + FromArgMatches,
     F: FnOnce(C),
 {
-    run_app(C::into_app(), settings, |m| {
+    run_app(C::command(), settings, |m| {
         let matches = C::from_arg_matches(m)
             .expect("Internal error, C::from_arg_matches should always succeed");
         f(matches);
@@ -138,7 +138,7 @@ struct Klask<'s> {
     output: Output,
     // This isn't a generic lifetime because eframe::run_native() requires
     // a 'static lifetime because boxed trait objects default to 'static
-    app: App<'static>,
+    app: Command<'static>,
 
     custom_font: Option<Cow<'static, [u8]>>,
     localization: &'s LocalizationSettings,
