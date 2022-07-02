@@ -16,7 +16,7 @@ clap = { version = "3", default-features = false, features = [
     "derive",
     "unicode",
 ] }
-clap_derive = { version = "3" }
+heck = { version = "*", features = ["unicode"] } # Add unicode support to clap
 uuid = { version = "1.0.0", features = ["v4"] }
 cansi = "2.1.1"
 eframe = { version = "0.16.0", default-features = false, features = [
