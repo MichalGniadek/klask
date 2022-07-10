@@ -36,7 +36,10 @@ mod settings;
 use app_state::AppState;
 use child_app::{ChildApp, StdinType};
 use clap::{App, ArgMatches, FromArgMatches, IntoApp};
-use eframe::{Frame, egui::{self, Button, Color32, Context, FontData, FontDefinitions, Grid, Style, TextEdit, Ui}, CreationContext};
+use eframe::{
+    egui::{self, Button, Color32, Context, FontData, FontDefinitions, Grid, Style, TextEdit, Ui},
+    CreationContext, Frame,
+};
 use error::ExecutionError;
 use native_dialog::FileDialog;
 
@@ -92,10 +95,14 @@ pub fn run_app(app: App<'static>, settings: Settings, f: impl FnOnce(&ArgMatches
             style: settings.style,
         };
         let native_options = eframe::NativeOptions::default();
-        eframe::run_native(app_name.as_str(), native_options, Box::new(|cc| {
-            klask.setup(cc);
-            Box::new(klask)
-        }));
+        eframe::run_native(
+            app_name.as_str(),
+            native_options,
+            Box::new(|cc| {
+                klask.setup(cc);
+                Box::new(klask)
+            }),
+        );
     }
 }
 
@@ -281,7 +288,7 @@ impl Klask<'_> {
                 FontData {
                     font: custom_font,
                     index: 0,
-                    tweak: Default::default()
+                    tweak: Default::default(),
                 },
             );
 
