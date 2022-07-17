@@ -26,12 +26,4 @@ eframe = { version = "0.16.0", default-features = false, features = [
 linkify = "0.8.0"
 thiserror = "1.0.30"
 
-[target.'cfg(not(target_os = "windows"))'.dependencies]
-native-dialog = "0.6.2"
-
-# Should make dialogs look better
-[target.'cfg(target_os = "windows")'.dependencies]
-native-dialog = { version = "0.6.2", features = [
-    "windows_dpi_awareness",
-    "windows_visual_styles",
-] }
+rfd = "0.9.1"

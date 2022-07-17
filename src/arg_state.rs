@@ -2,7 +2,7 @@ use crate::{settings::LocalizationSettings, Klask};
 use clap::{Arg, ArgSettings, ValueHint};
 use eframe::egui::{widgets::Widget, ComboBox, Response, TextEdit, Ui};
 use inflector::Inflector;
-use native_dialog::FileDialog;
+use rfd::FileDialog;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -130,7 +130,7 @@ impl<'s> ArgState<'s> {
                     ValueHint::AnyPath | ValueHint::FilePath | ValueHint::ExecutablePath
                 ) && ui.button(&localization.select_file).clicked()
                 {
-                    if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten() {
+                    if let Some(file) = FileDialog::new().pick_file() {
                         *value = file.to_string_lossy().into_owned();
                     }
                 }
@@ -138,7 +138,7 @@ impl<'s> ArgState<'s> {
                 if matches!(value_hint, ValueHint::AnyPath | ValueHint::DirPath)
                     && ui.button(&localization.select_directory).clicked()
                 {
-                    if let Some(file) = FileDialog::new().show_open_single_dir().ok().flatten() {
+                    if let Some(file) = FileDialog::new().pick_folder() {
                         *value = file.to_string_lossy().into_owned();
                     }
                 }
