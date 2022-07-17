@@ -23,7 +23,7 @@ eframe = { version = "0.16.0", default-features = false, features = [
     "default_fonts",
     "egui_glium",
 ] }
-linkify = "0.8.0"
+linkify = "0.9.0"
 thiserror = "1.0.30"
 
 rfd = "0.9.1"
