@@ -19,19 +19,18 @@ clap = { version = "3", default-features = false, features = [
 heck = { version = "*", features = ["unicode"] } # Add unicode support to clap
 uuid = { version = "1.0.0", features = ["v4"] }
 cansi = "2.1.1"
-eframe = { version = "0.16.0", default-features = false, features = [
+eframe = { version = "0.18.0", default-features = false, features = [
     "default_fonts",
-    "egui_glium",
 ] }
-linkify = "0.8.0"
-thiserror = "1.0.30"
+linkify = "0.8.1"
+thiserror = "1.0.31"
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-native-dialog = "0.6.2"
+native-dialog = "0.6.3"
 
 # Should make dialogs look better
 [target.'cfg(target_os = "windows")'.dependencies]
-native-dialog = { version = "0.6.2", features = [
+native-dialog = { version = "0.6.3", features = [
     "windows_dpi_awareness",
     "windows_visual_styles",
 ] }

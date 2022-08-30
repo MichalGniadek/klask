@@ -37,8 +37,8 @@ use app_state::AppState;
 use child_app::{ChildApp, StdinType};
 use clap::{ArgMatches, Command, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, Color32, CtxRef, FontData, FontDefinitions, Grid, Style, TextEdit, Ui},
-    epi,
+    egui::{self, Button, Color32, Context, FontData, FontDefinitions, Grid, Style, TextEdit, Ui},
+    CreationContext, Frame,
 };
 use error::ExecutionError;
 use native_dialog::FileDialog;
@@ -71,13 +71,14 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
     } else {
         // During validation we don't pass in a binary name
         let app = app.setting(clap::AppSettings::NoBinaryName);
+        let app_name = app.get_name().to_string();
 
         // eframe::run_native requires that Box::new(klask) has 'static
         // lifetime, so we must leak here. But it never returns (return value !)
         // so it should be ok.
         let localization = Box::leak(Box::new(settings.localization));
 
-        let klask = Klask {
+        let mut klask = Klask {
             state: AppState::new(&app, localization),
             tab: Tab::Arguments,
             env: settings.enable_env.map(|desc| (desc, vec![])),
@@ -94,7 +95,14 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
             style: settings.style,
         };
         let native_options = eframe::NativeOptions::default();
-        eframe::run_native(Box::new(klask), native_options);
+        eframe::run_native(
+            app_name.as_str(),
+            native_options,
+            Box::new(|cc| {
+                klask.setup(cc);
+                Box::new(klask)
+            }),
+        );
     }
 }
 
@@ -152,12 +160,8 @@ enum Tab {
     Stdin,
 }
 
-impl epi::App for Klask<'_> {
-    fn name(&self) -> &str {
-        self.app.get_name()
-    }
-
-    fn update(&mut self, ctx: &CtxRef, _frame: &epi::Frame) {
+impl eframe::App for Klask<'_> {
+    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 // Tab selection
@@ -269,9 +273,11 @@ impl epi::App for Klask<'_> {
             });
         });
     }
+}
 
-    fn setup(&mut self, ctx: &CtxRef, _: &epi::Frame, _: Option<&dyn epi::Storage>) {
-        ctx.set_style(self.style.clone());
+impl Klask<'_> {
+    fn setup(&mut self, cc: &CreationContext) {
+        cc.egui_ctx.set_style(self.style.clone());
 
         if let Some(custom_font) = self.custom_font.take() {
             let font_name = String::from("custom_font");
@@ -282,27 +288,26 @@ impl epi::App for Klask<'_> {
                 FontData {
                     font: custom_font,
                     index: 0,
+                    tweak: Default::default(),
                 },
             );
 
             fonts
-                .fonts_for_family
+                .families
                 .entry(egui::FontFamily::Proportional)
                 .or_default()
                 .insert(0, font_name.clone());
 
             fonts
-                .fonts_for_family
+                .families
                 .entry(egui::FontFamily::Monospace)
                 .or_default()
                 .push(font_name);
 
-            ctx.set_fonts(fonts);
+            cc.egui_ctx.set_fonts(fonts);
         }
     }
-}
 
-impl Klask<'_> {
     fn try_start_execution(&mut self) -> Result<ChildApp, ExecutionError> {
         let args = self.state.get_cmd_args(vec![])?;
 
