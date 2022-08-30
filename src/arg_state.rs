@@ -1,5 +1,5 @@
 use crate::{settings::LocalizationSettings, Klask};
-use clap::{Arg, ArgSettings, ValueHint};
+use clap::{Arg, ValueHint};
 use eframe::egui::{widgets::Widget, ComboBox, Response, TextEdit, Ui};
 use inflector::Inflector;
 use rfd::FileDialog;
@@ -42,7 +42,7 @@ pub enum ArgKind {
 
 impl<'s> ArgState<'s> {
     pub fn new(arg: &Arg, localization: &'s LocalizationSettings) -> Self {
-        let kind = if arg.is_set(ArgSettings::TakesValue) {
+        let kind = if arg.is_takes_value_set() {
             let mut default = arg
                 .get_default_values()
                 .iter()
@@ -55,8 +55,8 @@ impl<'s> ArgState<'s> {
                 .map(|v| v.get_name().to_string())
                 .collect();
 
-            let multiple_values = arg.is_set(ArgSettings::MultipleValues);
-            let multiple_occurrences = arg.is_set(ArgSettings::MultipleOccurrences);
+            let multiple_values = arg.is_multiple_values_set();
+            let multiple_occurrences = arg.is_multiple_occurrences_set();
 
             if multiple_occurrences | multiple_values {
                 ArgKind::MultipleStrings {
@@ -65,9 +65,9 @@ impl<'s> ArgState<'s> {
                     possible,
                     multiple_values,
                     multiple_occurrences,
-                    use_delimiter: arg.is_set(ArgSettings::UseValueDelimiter)
-                        | arg.is_set(ArgSettings::RequireDelimiter),
-                    req_delimiter: arg.is_set(ArgSettings::RequireDelimiter),
+                    use_delimiter: arg.is_use_value_delimiter_set()
+                        | arg.is_require_value_delimiter_set(),
+                    req_delimiter: arg.is_require_value_delimiter_set(),
                     value_hint: arg.get_value_hint(),
                 }
             } else {
@@ -78,14 +78,14 @@ impl<'s> ArgState<'s> {
                     value_hint: arg.get_value_hint(),
                 }
             }
-        } else if arg.is_set(ArgSettings::MultipleOccurrences) {
+        } else if arg.is_multiple_occurrences_set() {
             ArgKind::Occurences(0)
         } else {
             ArgKind::Bool(false)
         };
 
         Self {
-            name: arg.get_name().to_string().to_sentence_case(),
+            name: arg.get_id().to_string().to_sentence_case(),
             call_name: arg
                 .get_long()
                 .map(|s| format!("--{}", s))
@@ -94,9 +94,9 @@ impl<'s> ArgState<'s> {
                 .get_long_help()
                 .map(ToString::to_string)
                 .or_else(|| arg.get_help().map(ToString::to_string)),
-            optional: !arg.is_set(ArgSettings::Required),
-            use_equals: arg.is_set(ArgSettings::RequireEquals),
-            forbid_empty: arg.is_set(ArgSettings::ForbidEmptyValues),
+            optional: !arg.is_required_set(),
+            use_equals: arg.is_require_equals_set(),
+            forbid_empty: arg.is_forbid_empty_values_set(),
             kind,
             validation_error: None,
             localization,

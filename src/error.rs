@@ -18,7 +18,7 @@ pub enum ExecutionError {
 
 impl From<clap::Error> for ExecutionError {
     fn from(err: clap::Error) -> Self {
-        match err.kind {
+        match clap::Error::kind(&err) {
             clap::ErrorKind::ValueValidation => {
                 if let Some(name) = err.info[0]
                     .split_once('<')

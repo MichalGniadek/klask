@@ -1,5 +1,5 @@
 use crate::{arg_state::ArgState, settings::LocalizationSettings};
-use clap::App;
+use clap::Command;
 use eframe::egui::{widgets::Widget, Grid, Response, Ui};
 use inflector::Inflector;
 use std::collections::BTreeMap;
@@ -15,10 +15,10 @@ pub struct AppState<'s> {
 }
 
 impl<'s> AppState<'s> {
-    pub fn new(app: &App, localization: &'s LocalizationSettings) -> Self {
+    pub fn new(app: &Command, localization: &'s LocalizationSettings) -> Self {
         let args = app
             .get_arguments()
-            .filter(|a| a.get_name() != "help" && a.get_name() != "version")
+            .filter(|a| a.get_id() != "help" && a.get_id() != "version")
             .map(|a| ArgState::new(a, localization))
             .collect();
 
