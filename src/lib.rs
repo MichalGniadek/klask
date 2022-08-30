@@ -41,7 +41,7 @@ use eframe::{
     CreationContext, Frame,
 };
 use error::ExecutionError;
-use native_dialog::FileDialog;
+use rfd::FileDialog;
 
 use output::Output;
 pub use settings::{LocalizationSettings, Settings};
@@ -215,7 +215,7 @@ impl eframe::App for Klask<'_> {
                             ui.horizontal(|ui| {
                                 if ui.button(&localization.select_directory).clicked() {
                                     if let Some(file) =
-                                        FileDialog::new().show_open_single_dir().ok().flatten()
+                                        FileDialog::new().pick_folder()
                                     {
                                         *path = file.to_string_lossy().into_owned();
                                     }
@@ -433,7 +433,7 @@ impl Klask<'_> {
             StdinType::File(path) => {
                 ui.horizontal(|ui| {
                     if ui.button(&localization.select_file).clicked() {
-                        if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
+                        if let Some(file) = FileDialog::new().pick_file()
                         {
                             *path = file.to_string_lossy().into_owned();
                         }
