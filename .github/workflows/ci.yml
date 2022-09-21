@@ -29,45 +29,24 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-      - name: Cache
-        uses: Swatinem/rust-cache@v1
-      - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-  fmt:
-    name: Rust fmt
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          components: rustfmt
-      - name: Cache
-        uses: Swatinem/rust-cache@v1
-      - name: Rust fmt
+          components: clippy
+      - name: Set up cargo cache
+        uses: Swatinem/rust-cache@v2
+      - name: Rustfmt
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Install toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Check default features
+        uses: actions-rs/cargo@v1
         with:
-          profile: minimal
-          toolchain: nightly
-          components: clippy
-      - name: Cache
-        uses: Swatinem/rust-cache@v1
+          command: check
+          args: --locked
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --all-features
       - name: Clippy
         uses: actions-rs/clippy-check@v1
         with:
