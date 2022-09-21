@@ -6,11 +6,13 @@ on:
       - master
     paths-ignore:
       - '**.md'
+      - 'media/**'
   pull_request:
     branches:
       - master
     paths-ignore:
       - '**.md'
+      - 'media/**'
   workflow_dispatch:
 
 jobs:
