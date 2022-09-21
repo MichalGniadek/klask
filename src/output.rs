@@ -179,8 +179,7 @@ impl OutputType {
                 format!("{}\n", iter.next().unwrap_or_default()),
                 iter.next().and_then(|s| s.parse().ok()).unwrap_or_default(),
             )),
-            None => None,
-            _ => panic!(),
+            _ => None,
         }
     }
 }
