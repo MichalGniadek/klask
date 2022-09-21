@@ -229,7 +229,7 @@ impl<'s> ArgState<'s> {
 
                                 if *req_delimiter {
                                     args.push(
-                                        (&values
+                                        (values
                                             .iter()
                                             .map(|(s, _)| format!(",{}", s))
                                             .collect::<String>()[1..])
