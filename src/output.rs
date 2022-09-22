@@ -234,10 +234,10 @@ fn format_output(ui: &mut Ui, text: &str) {
                             text = text.strikethrough();
                         }
 
-                        text = match intensity.unwrap_or(Intensity::Normal) {
-                            Intensity::Normal => text,
+                        text = match intensity {
                             Intensity::Bold => text.strong(),
                             Intensity::Faint => text.weak(),
+                            Intensity::Normal | None => text,
                         };
 
                         ui.add(Label::new(text))
