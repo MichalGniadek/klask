@@ -234,9 +234,9 @@ fn format_output(ui: &mut Ui, text: &str) {
                         }
 
                         text = match intensity {
-                            Intensity::Bold => text.strong(),
-                            Intensity::Faint => text.weak(),
-                            Intensity::Normal | None => text,
+                            Some(Intensity::Bold) => text.strong(),
+                            Some(Intensity::Faint) => text.weak(),
+                            Some(Intensity::Normal) | None => text,
                         };
 
                         ui.add(Label::new(text))
