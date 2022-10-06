@@ -15,6 +15,7 @@ clap = { version = "3", default-features = false, features = [
     "std",
     "derive",
     "unicode",
+    "deprecated",
 ] }
 heck = { version = "*", features = ["unicode"] } # Add unicode support to clap
 uuid = { version = "1", features = ["v4"] }
