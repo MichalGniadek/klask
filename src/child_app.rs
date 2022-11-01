@@ -1,4 +1,4 @@
-use crate::{ExecutionError, CHILD_APP_ENV_VAR};
+use crate::{ExecutionError, CHILD_APP_ENV_VAR, CTX};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
@@ -109,6 +109,11 @@ impl ChildApp {
                 // End of output
                 let _ = tx.send(None);
                 break;
+            }
+            unsafe {
+                if let Some(ctx) = &CTX {
+                    ctx.request_repaint();
+                }
             }
             // Send returns error only if data will never be received
             if tx.send(Some(output)).is_err() {

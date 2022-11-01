@@ -153,6 +153,8 @@ struct Klask<'s> {
     style: Style,
 }
 
+static mut CTX: Option<egui::Context> = None;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum Tab {
     Arguments,
@@ -275,6 +277,10 @@ impl eframe::App for Klask<'_> {
 
 impl Klask<'_> {
     fn setup(&mut self, cc: &CreationContext) {
+        let ctx = cc.egui_ctx.clone();
+        unsafe {
+            let _ = CTX.insert(ctx);
+        }
         cc.egui_ctx.set_style(self.style.clone());
 
         if let Some(custom_font) = self.custom_font.take() {
