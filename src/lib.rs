@@ -239,7 +239,7 @@ impl eframe::App for Klask<'_> {
                         )
                         .clicked()
                     {
-                        match self.try_start_execution() {
+                        match self.try_start_execution(ctx.clone()) {
                             Ok(child) => {
                                 // Reset
                                 self.state.update_validation_error("", "");
@@ -306,7 +306,7 @@ impl Klask<'_> {
         }
     }
 
-    fn try_start_execution(&mut self) -> Result<ChildApp, ExecutionError> {
+    fn try_start_execution(&mut self, ctx: egui::Context) -> Result<ChildApp, ExecutionError> {
         let args = self.state.get_cmd_args(vec![])?;
 
         // Check for validation errors
@@ -330,6 +330,7 @@ impl Klask<'_> {
             self.env.clone().map(|(_, env)| env),
             self.stdin.clone().map(|(_, stdin)| stdin),
             self.working_dir.clone().map(|(_, dir)| dir),
+            ctx,
         )
     }
 
