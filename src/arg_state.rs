@@ -1,4 +1,4 @@
-use crate::{settings::LocalizationSettings, Klask};
+use crate::{settings::Localization, Klask};
 use clap::{Arg, ValueHint};
 use eframe::egui::{widgets::Widget, ComboBox, Response, TextEdit, Ui};
 use inflector::Inflector;
@@ -15,7 +15,7 @@ pub struct ArgState<'s> {
     pub forbid_empty: bool,
     pub kind: ArgKind,
     pub validation_error: Option<String>,
-    pub localization: &'s LocalizationSettings,
+    pub localization: &'s Localization,
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ pub enum ArgKind {
 }
 
 impl<'s> ArgState<'s> {
-    pub fn new(arg: &Arg, localization: &'s LocalizationSettings) -> Self {
+    pub fn new(arg: &Arg, localization: &'s Localization) -> Self {
         let kind = if arg.is_takes_value_set() {
             let mut default = arg
                 .get_default_values()
@@ -72,7 +72,7 @@ impl<'s> ArgState<'s> {
                 }
             } else {
                 ArgKind::String {
-                    value: ("".to_string(), Uuid::new_v4()),
+                    value: (String::new(), Uuid::new_v4()),
                     default: default.next(),
                     possible,
                     value_hint: arg.get_value_hint(),
@@ -116,7 +116,7 @@ impl<'s> ArgState<'s> {
         value_hint: ValueHint,
         optional: bool,
         validation_error: bool,
-        localization: &'s LocalizationSettings,
+        localization: &'s Localization,
     ) -> Response {
         let is_error = (!optional && value.is_empty()) || validation_error;
         if is_error {
@@ -353,7 +353,7 @@ impl Widget for &mut ArgState<'_> {
 
                         ui.horizontal(|ui| {
                             if ui.button(&localization.new_value).clicked() {
-                                values.push(("".into(), Uuid::new_v4()));
+                                values.push((String::new(), Uuid::new_v4()));
                             }
 
                             let text = if default.is_empty() {

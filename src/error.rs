@@ -25,15 +25,15 @@ impl From<clap::Error> for ExecutionError {
                     .and_then(|(_, suffix)| suffix.split_once('>'))
                     .map(|(prefix, _)| prefix.to_sentence_case())
                 {
-                    ExecutionError::ValidationError {
+                    Self::ValidationError {
                         name,
                         message: err.info[2].clone(),
                     }
                 } else {
-                    ExecutionError::NoValidationName
+                    Self::NoValidationName
                 }
             }
-            _ => ExecutionError::MatchError(err),
+            _ => Self::MatchError(err),
         }
     }
 }
