@@ -1,7 +1,7 @@
 use super::AppState;
 use crate::{
     arg_state::{ArgKind, ArgState},
-    settings::LocalizationSettings,
+    settings::Localization,
 };
 use clap::{FromArgMatches, IntoApp, Parser, ValueHint};
 use std::{fmt::Debug, path::PathBuf};
@@ -197,7 +197,7 @@ where
     F: FnOnce(&mut Vec<ArgState>),
 {
     let app = C::into_app();
-    let localization = LocalizationSettings::default();
+    let localization = Localization::default();
     let mut app_state = AppState::new(&app, &localization);
     setup(&mut app_state.args);
     let args = app_state.get_cmd_args(vec!["_name".into()]).unwrap();

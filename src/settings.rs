@@ -31,7 +31,7 @@ pub struct Settings {
     pub custom_font: Option<Cow<'static, [u8]>>,
 
     /// Override builtin strings. By default everything is in english.
-    pub localization: LocalizationSettings,
+    pub localization: Localization,
 
     /// Egui style used in GUI.
     pub style: Style,
@@ -40,10 +40,10 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            enable_env: Default::default(),
-            enable_stdin: Default::default(),
-            enable_working_dir: Default::default(),
-            custom_font: Default::default(),
+            enable_env: Option::default(),
+            enable_stdin: Option::default(),
+            enable_working_dir: Option::default(),
+            custom_font: Option::default(),
             localization: Default::default(),
             style: Style {
                 spacing: Spacing {
@@ -60,7 +60,7 @@ impl Default for Settings {
 /// Localization for builtin strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct LocalizationSettings {
+pub struct Localization {
     /// Displays when the value is optional. Default is "(Optional)".
     pub optional: String,
     /// Button text for opening a dialog for file selection. Default is "Select file...".
@@ -100,7 +100,7 @@ pub struct LocalizationSettings {
     pub running: String,
 }
 
-impl Default for LocalizationSettings {
+impl Default for Localization {
     fn default() -> Self {
         Self {
             optional: "(Optional)".into(),

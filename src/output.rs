@@ -26,7 +26,7 @@ use std::io::Write;
 /// }
 /// ```
 pub fn progress_bar(description: &str, value: f32) {
-    progress_bar_with_id(description, description, value)
+    progress_bar_with_id(description, description, value);
 }
 
 /// Displays a progress bar in the output. First call creates
@@ -80,7 +80,7 @@ impl Widget for &mut Output {
 
                 if let Some(text) = iter.next() {
                     if !text.is_empty() {
-                        output.push((0, OutputType::Text(text.to_string())))
+                        output.push((0, OutputType::Text(text.to_string())));
                     }
                 }
 
@@ -99,7 +99,7 @@ impl Widget for &mut Output {
                         // Get rid of the newline
                         let text = &text[1..];
                         if !text.is_empty() {
-                            output.push((0, OutputType::Text(text.to_string())))
+                            output.push((0, OutputType::Text(text.to_string())));
                         }
                     }
                 }
@@ -162,8 +162,8 @@ impl OutputType {
     pub fn send(self, id: u64) {
         // Make sure to get rid of any newlines
         match self {
-            OutputType::Text(s) => print!("{}", s),
-            OutputType::ProgressBar(desc, value) => send_message(&[
+            Self::Text(s) => print!("{}", s),
+            Self::ProgressBar(desc, value) => send_message(&[
                 &id.to_string(),
                 Self::PROGRESS_BAR_STR,
                 &desc.replace('\n', " "),
@@ -221,15 +221,15 @@ fn format_output(ui: &mut Ui, text: &str) {
                             }
                         }
 
-                        if let Some(true) = italic {
+                        if italic == Some(true) {
                             text = text.italics();
                         }
 
-                        if let Some(true) = underline {
+                        if underline == Some(true) {
                             text = text.underline();
                         }
 
-                        if let Some(true) = strikethrough {
+                        if strikethrough == Some(true) {
                             text = text.strikethrough();
                         }
 

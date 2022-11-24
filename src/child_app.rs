@@ -9,7 +9,7 @@ use std::{
 };
 
 #[derive(Debug)]
-pub(crate) struct ChildApp {
+pub struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,
     stderr: Option<Receiver<Option<String>>>,
@@ -76,7 +76,7 @@ impl ChildApp {
             }
         }
 
-        Ok(ChildApp {
+        Ok(Self {
             child,
             stdout: Some(stdout),
             stderr: Some(stderr),
@@ -95,7 +95,7 @@ impl ChildApp {
     }
 
     pub fn kill(&mut self) {
-        let _ = self.child.kill();
+        drop(self.child.kill());
         self.stdout = None;
         self.stderr = None;
     }
@@ -107,7 +107,7 @@ impl ChildApp {
             let mut output = String::new();
             if let Ok(0) = reader.read_line(&mut output) {
                 // End of output
-                let _ = tx.send(None);
+                drop(tx.send(None));
                 break;
             }
             // Send returns error only if data will never be received

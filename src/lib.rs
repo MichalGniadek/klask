@@ -44,7 +44,7 @@ use error::ExecutionError;
 use rfd::FileDialog;
 
 use output::Output;
-pub use settings::{LocalizationSettings, Settings};
+pub use settings::{Localization, Settings};
 use std::{borrow::Cow, hash::Hash};
 
 const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
@@ -67,7 +67,7 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
             .try_get_matches()
             .expect("Internal error, arguments should've been verified by the GUI app");
 
-        f(&matches)
+        f(&matches);
     } else {
         // During validation we don't pass in a binary name
         let app = app.setting(clap::AppSettings::NoBinaryName);
@@ -149,7 +149,7 @@ struct Klask<'s> {
     app: Command<'static>,
 
     custom_font: Option<Cow<'static, [u8]>>,
-    localization: &'s LocalizationSettings,
+    localization: &'s Localization,
     style: Style,
 }
 
@@ -165,9 +165,8 @@ impl eframe::App for Klask<'_> {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 // Tab selection
-                let tab_count = 1
-                    + if self.env.is_some() { 1 } else { 0 }
-                    + if self.stdin.is_some() { 1 } else { 0 };
+                let tab_count =
+                    1 + usize::from(self.env.is_some()) + usize::from(self.stdin.is_some());
 
                 if tab_count > 1 {
                     ui.columns(tab_count, |ui| {
@@ -261,7 +260,7 @@ impl eframe::App for Klask<'_> {
                     if self.is_child_running() {
                         let mut running_text = String::from(&self.localization.running);
                         for _ in 0..((2.0 * ui.input().time) as i32 % 4) {
-                            running_text.push('.')
+                            running_text.push('.');
                         }
                         ui.label(running_text);
                     }
