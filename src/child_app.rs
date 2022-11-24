@@ -1,4 +1,5 @@
 use crate::{ExecutionError, CHILD_APP_ENV_VAR};
+use eframe::egui;
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
@@ -27,6 +28,7 @@ impl ChildApp {
         env: Option<Vec<(String, String)>>,
         stdin: Option<StdinType>,
         working_dir: Option<String>,
+        ctx: egui::Context,
     ) -> Result<Self, ExecutionError> {
         let mut child = Command::new(std::env::current_exe()?);
 
@@ -54,6 +56,7 @@ impl ChildApp {
                 .stdout
                 .take()
                 .ok_or(ExecutionError::NoStdoutOrStderr)?,
+            ctx.clone(),
         );
 
         let stderr = Self::spawn_thread_reader(
@@ -61,6 +64,7 @@ impl ChildApp {
                 .stderr
                 .take()
                 .ok_or(ExecutionError::NoStdoutOrStderr)?,
+            ctx,
         );
 
         if let Some(stdin) = stdin {
@@ -100,7 +104,10 @@ impl ChildApp {
         self.stderr = None;
     }
 
-    fn spawn_thread_reader<R: Read + Send + Sync + 'static>(stdio: R) -> Receiver<Option<String>> {
+    fn spawn_thread_reader<R: Read + Send + Sync + 'static>(
+        stdio: R,
+        ctx: egui::Context,
+    ) -> Receiver<Option<String>> {
         let mut reader = BufReader::new(stdio);
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || loop {
@@ -108,12 +115,14 @@ impl ChildApp {
             if let Ok(0) = reader.read_line(&mut output) {
                 // End of output
                 drop(tx.send(None));
+                ctx.request_repaint();
                 break;
             }
             // Send returns error only if data will never be received
             if tx.send(Some(output)).is_err() {
                 break;
             }
+            ctx.request_repaint();
         });
         rx
     }
