@@ -1,5 +1,5 @@
 use clap::{Parser, ValueHint};
-use klask::{LocalizationSettings, Settings};
+use klask::{Localization, Settings};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -26,8 +26,8 @@ fn main() {
     klask::run_derived::<LocalizationExample, _>(settings, |_| {})
 }
 
-fn polish_localization_exaple() -> LocalizationSettings {
-    let mut loc = LocalizationSettings::default();
+fn polish_localization_exaple() -> Localization {
+    let mut loc = Localization::default();
     loc.optional = "(Opcjonalne)".into();
     loc.select_file = "Wybierz plik...".into();
     loc.select_directory = "Wybierz folder...".into();

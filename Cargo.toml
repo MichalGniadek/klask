@@ -11,17 +11,17 @@ keywords = ["clap", "gui", "ui", "cli", "egui"]
 
 [dependencies]
 Inflector = { version = "0.11.4", default-features = false }
+cansi = "2.2.0"
 clap = { version = "3", default-features = false, features = [
     "std",
     "derive",
     "unicode",
 ] }
-heck = { version = "*", features = ["unicode"] } # Add unicode support to clap
-uuid = { version = "1", features = ["v4"] }
-cansi = "2.2.0"
 eframe = { version = "0.18.0", default-features = false, features = [
     "default_fonts",
 ] }
+heck = { version = "*", features = ["unicode"] } # Add unicode support to clap
 linkify = "0.9.0"
 rfd = "0.10.0"
 thiserror = "1.0.35"
+uuid = { version = "1", features = ["v4"] }
