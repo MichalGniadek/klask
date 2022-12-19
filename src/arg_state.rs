@@ -2,6 +2,7 @@ use crate::{settings::Localization, Klask};
 use clap::{Arg, ValueHint};
 use eframe::egui::{widgets::Widget, ComboBox, Response, TextEdit, Ui};
 use inflector::Inflector;
+#[cfg(not(target_arch = "wasm32"))]
 use rfd::FileDialog;
 use uuid::Uuid;
 
@@ -130,6 +131,7 @@ impl<'s> ArgState<'s> {
                     ValueHint::AnyPath | ValueHint::FilePath | ValueHint::ExecutablePath
                 ) && ui.button(&localization.select_file).clicked()
                 {
+                    #[cfg(not(target_arch = "wasm32"))]
                     if let Some(file) = FileDialog::new().pick_file() {
                         *value = file.to_string_lossy().into_owned();
                     }
@@ -138,6 +140,7 @@ impl<'s> ArgState<'s> {
                 if matches!(value_hint, ValueHint::AnyPath | ValueHint::DirPath)
                     && ui.button(&localization.select_directory).clicked()
                 {
+                    #[cfg(not(target_arch = "wasm32"))]
                     if let Some(file) = FileDialog::new().pick_folder() {
                         *value = file.to_string_lossy().into_owned();
                     }

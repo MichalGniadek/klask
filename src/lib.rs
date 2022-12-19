@@ -41,6 +41,7 @@ use eframe::{
     CreationContext, Frame,
 };
 use error::ExecutionError;
+#[cfg(not(target_arch = "wasm32"))]
 use rfd::FileDialog;
 
 use output::Output;
@@ -59,6 +60,7 @@ const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
 ///    println!("{}", matches.is_present("debug"))
 /// });
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMatches)) {
     if std::env::var(CHILD_APP_ENV_VAR).is_ok() {
         std::env::remove_var(CHILD_APP_ENV_VAR);
@@ -213,6 +215,7 @@ impl eframe::App for Klask<'_> {
                             let localization = self.localization;
                             ui.horizontal(|ui| {
                                 if ui.button(&localization.select_directory).clicked() {
+                                    #[cfg(not(target_arch = "wasm32"))]
                                     if let Some(file) = FileDialog::new().pick_folder() {
                                         *path = file.to_string_lossy().into_owned();
                                     }
@@ -431,6 +434,7 @@ impl Klask<'_> {
             StdinType::File(path) => {
                 ui.horizontal(|ui| {
                     if ui.button(&localization.select_file).clicked() {
+                        #[cfg(not(target_arch = "wasm32"))]
                         if let Some(file) = FileDialog::new().pick_file() {
                             *path = file.to_string_lossy().into_owned();
                         }
