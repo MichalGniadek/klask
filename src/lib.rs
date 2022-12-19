@@ -123,6 +123,7 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
 ///     println!("{}", example.debug);
 /// });
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_derived<C, F>(settings: Settings, f: F)
 where
     C: IntoApp + FromArgMatches,
