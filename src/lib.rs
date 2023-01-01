@@ -70,7 +70,7 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
         f(&matches);
     } else {
         // During validation we don't pass in a binary name
-        let app = app.setting(clap::AppSettings::NoBinaryName);
+        let app = app.no_binary_name(true);
         let app_name = app.get_name().to_string();
 
         // eframe::run_native requires that Box::new(klask) has 'static
