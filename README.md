@@ -23,3 +23,9 @@ Example gui:
 
 Generated from [miniserve](https://github.com/svenstaro/miniserve)'s app:
 ![image showcasing the gui](media/miniserve-2021-09-25.png)
+
+## How it works
+
+* The binary runs and there's no `CHILD_APP_ENV_VAR` environment variable ⇾ no user code runs, only the GUI is displayed.
+* The "Run" button in the GUI is pressed ⇾ `CHILD_APP_ENV_VAR` is set, the binary is started again. Arguments are passed to `stdin` and `stdout` is intercepted for displaying output.
+* The binary is run with `CHILD_APP_ENV_VAR` ⇾ the user-provided closure is run.
