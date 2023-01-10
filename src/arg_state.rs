@@ -274,11 +274,7 @@ impl<'s> ArgState<'s> {
             }
             &ArgKind::Bool(bool) => {
                 if bool {
-                    args.push(
-                        self.call_name
-                            .clone()
-                            .ok_or_else(|| "Internal error.".to_string())?,
-                    );
+                    args.push(self.call_name.clone().unwrap_or_else(|| "true".to_owned()));
                 }
             }
         }
