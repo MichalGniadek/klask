@@ -202,6 +202,22 @@ fn positional_bool() {
     test_app(|args| args[0].set(), PositionalBool { verbose: true })
 }
 
+#[derive(Debug, Parser, PartialEq, Eq)]
+struct MultipleOccurrences {
+    #[clap(short, long, number_of_values(1))]
+    a: Vec<PathBuf>,
+}
+
+#[test]
+fn multiple_occurrences() {
+    test_app(
+        |args| args[0].enter_multiple(["a", "b"]),
+        MultipleOccurrences {
+            a: vec!["a".into(), "b".into()],
+        },
+    )
+}
+
 fn test_app<C, F>(setup: F, expected: C)
 where
     C: IntoApp + FromArgMatches + Debug + Eq,
