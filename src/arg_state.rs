@@ -214,6 +214,16 @@ impl<'s> ArgState<'s> {
                             *multiple_occurrences,
                             single,
                         ) {
+                            (true, _, true, _) => {
+                                for value in values {
+                                    args.push(format!("{}={}", call_name, value.0));
+                                }
+                            }
+                            (false, _, true, _) => {
+                                for value in values {
+                                    args.extend_from_slice(&[call_name.clone(), value.0.clone()]);
+                                }
+                            }
                             (true, true, _, true) => {
                                 args.push(format!(
                                     "{}={}",
@@ -239,16 +249,6 @@ impl<'s> ArgState<'s> {
                                     for value in values {
                                         args.push(value.0.clone());
                                     }
-                                }
-                            }
-                            (true, _, true, _) => {
-                                for value in values {
-                                    args.push(format!("{}={}", call_name, value.0));
-                                }
-                            }
-                            (false, _, true, _) => {
-                                for value in values {
-                                    args.extend_from_slice(&[call_name.clone(), value.0.clone()]);
                                 }
                             }
                             (_, false, false, _) => unreachable!(
