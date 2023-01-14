@@ -191,6 +191,17 @@ fn different_multiple_values() {
     )
 }
 
+#[derive(Debug, Parser, PartialEq, Eq)]
+struct PositionalBool {
+    verbose: bool,
+}
+
+#[test]
+fn positional_bool() {
+    test_app(|_| {}, PositionalBool { verbose: false });
+    test_app(|args| args[0].set(), PositionalBool { verbose: true })
+}
+
 fn test_app<C, F>(setup: F, expected: C)
 where
     C: IntoApp + FromArgMatches + Debug + Eq,
