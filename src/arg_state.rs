@@ -49,9 +49,10 @@ impl<'s> ArgState<'s> {
                 .map(|s| s.to_string_lossy().into_owned());
 
             let possible = arg
-                .get_possible_values()
-                .unwrap_or_default()
-                .iter()
+                .get_value_parser()
+                .possible_values()
+                .unwrap_or(Box::new(std::iter::empty()))
+                .into_iter()
                 .map(|v| v.get_name().to_string())
                 .collect();
 

@@ -1,3 +1,4 @@
+use clap::error::ContextValue;
 use inflector::Inflector;
 
 #[derive(Debug, thiserror::Error)]
@@ -20,17 +21,21 @@ impl From<clap::Error> for ExecutionError {
     fn from(err: clap::Error) -> Self {
         match clap::Error::kind(&err) {
             clap::ErrorKind::ValueValidation => {
-                if let Some(name) = err.info[0]
-                    .split_once('<')
-                    .and_then(|(_, suffix)| suffix.split_once('>'))
-                    .map(|(prefix, _)| prefix.to_sentence_case())
-                {
-                    Self::ValidationError {
-                        name,
-                        message: err.info[2].clone(),
-                    }
-                } else {
-                    Self::NoValidationName
+                let name =
+                    if let Some(ContextValue::String(s)) = err.context().next().map(|(_, n)| n) {
+                        s.split_once('<')
+                            .and_then(|(_, suffix)| suffix.split_once('>'))
+                            .map(|(prefix, _)| prefix.to_sentence_case())
+                    } else {
+                        return Self::NoValidationName;
+                    };
+                let Some(name) = name else {return Self::NoValidationName;};
+                //let Some(ContextValue::String(message)) = err.context().nth(1).map(|(_, n)| n) else {
+                //return Self::NoValidationName
+                //};
+                Self::ValidationError {
+                    name,
+                    message: "test".to_string(),
                 }
             }
             _ => Self::MatchError(err),
