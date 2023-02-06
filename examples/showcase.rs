@@ -39,7 +39,7 @@ pub enum Subcommand {
 #[derive(Debug, Parser)]
 pub enum InnerSubcommand {
     InnerSubcommandA {
-        #[clap(short, multiple_occurrences(true))]
+        #[clap(short, multiple_occurrences(true), default_value = "initial value")]
         multiple_values: Vec<String>,
     },
     /// About

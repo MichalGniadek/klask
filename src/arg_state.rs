@@ -48,6 +48,8 @@ impl<'s> ArgState<'s> {
                 .iter()
                 .map(|s| s.to_string_lossy().into_owned());
 
+            let initial_values = default.clone().map(|s| (s, Uuid::new_v4())).collect();
+
             let possible = arg
                 .get_possible_values()
                 .unwrap_or_default()
@@ -60,7 +62,7 @@ impl<'s> ArgState<'s> {
 
             if multiple_occurrences | multiple_values {
                 ArgKind::MultipleStrings {
-                    values: vec![],
+                    values: initial_values,
                     default: default.collect(),
                     possible,
                     multiple_values,
