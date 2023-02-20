@@ -1,11 +1,13 @@
-use crate::child_app::ChildApp;
-use crate::error::ExecutionError;
-use cansi::{CategorisedSlice, Color};
-use eframe::egui::{vec2, Color32, Label, ProgressBar, RichText, Ui, Widget};
-use linkify::{LinkFinder, LinkKind};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
+
+use cansi::{CategorisedSlice, Color};
+use eframe::egui::{Color32, Label, ProgressBar, RichText, Ui, vec2, Widget};
+use linkify::{LinkFinder, LinkKind};
+
+use crate::child_app::ChildApp;
+use crate::error::ExecutionError;
 
 /// Displays a progress bar in the output. First call creates
 /// a progress bar and future calls update it.
@@ -107,15 +109,16 @@ impl Widget for &mut Output {
                 // View
                 ui.vertical(|ui| {
                     if ui.button("Copy output").clicked() {
-                        ui.ctx().output().copied_text = output
-                            .iter()
-                            .map(|(_, o)| match o {
-                                OutputType::Text(text) => text,
-                                OutputType::ProgressBar(text, _) => text,
-                            })
-                            .flat_map(|text| cansi::categorise_text(text))
-                            .map(|slice| slice.text)
-                            .collect::<String>();
+                        ui.ctx().output_mut(|p|
+                            p.copied_text = output
+                                .iter()
+                                .map(|(_, o)| match o {
+                                    OutputType::Text(text) => text,
+                                    OutputType::ProgressBar(text, _) => text,
+                                })
+                                .flat_map(|text| cansi::categorise_text(text))
+                                .map(|slice| slice.text)
+                                .collect::<String>());
                     }
 
                     for (_, o) in output {
@@ -132,7 +135,7 @@ impl Widget for &mut Output {
                         }
                     }
                 })
-                .response
+                    .response
             }
         }
     }
@@ -172,7 +175,7 @@ impl OutputType {
         }
     }
 
-    pub fn parse<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<Self> {
+    pub fn parse<'a>(iter: &mut impl Iterator<Item=&'a str>) -> Option<Self> {
         match iter.next() {
             // Add a newline here for copying out text
             Some(Self::PROGRESS_BAR_STR) => Some(Self::ProgressBar(

@@ -16,15 +16,14 @@ clap = { version = "3", default-features = false, features = [
     "derive",
     "unicode",
 ] }
-heck = { version = "*", features = ["unicode"] } # Add unicode support to clap
-uuid = { version = "1.0.0", features = ["v4"] }
+clap_derive = { version = "=3.0.0" }
+uuid = { version = "1.3", features = ["v4"] }
 cansi = "2.1.1"
-eframe = { version = "0.16.0", default-features = false, features = [
-    "default_fonts",
-    "egui_glium",
+eframe = { version = "0.21", default-features = false, features = [
+    "default_fonts", "glow"
 ] }
-linkify = "0.8.0"
-thiserror = "1.0.30"
+linkify = "0.9"
+thiserror = "1.0"
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 native-dialog = "0.6.2"
