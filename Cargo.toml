@@ -11,6 +11,7 @@ keywords = ["clap", "gui", "ui", "cli", "egui"]
 
 [dependencies]
 Inflector = { version = "0.11.4", default-features = false }
+cansi = "2.2.0"
 clap = { version = "3", default-features = false, features = [
     "std",
     "derive",

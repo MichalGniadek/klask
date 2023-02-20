@@ -1,4 +1,5 @@
 use crate::{ExecutionError, CHILD_APP_ENV_VAR};
+use eframe::egui;
 use std::{
     fs::File,
     io::{BufRead, BufReader, Read, Write},
@@ -9,7 +10,7 @@ use std::{
 };
 
 #[derive(Debug)]
-pub(crate) struct ChildApp {
+pub struct ChildApp {
     child: Child,
     stdout: Option<Receiver<Option<String>>>,
     stderr: Option<Receiver<Option<String>>>,
@@ -27,6 +28,7 @@ impl ChildApp {
         env: Option<Vec<(String, String)>>,
         stdin: Option<StdinType>,
         working_dir: Option<String>,
+        ctx: egui::Context,
     ) -> Result<Self, ExecutionError> {
         let mut child = Command::new(std::env::current_exe()?);
 
@@ -54,6 +56,7 @@ impl ChildApp {
                 .stdout
                 .take()
                 .ok_or(ExecutionError::NoStdoutOrStderr)?,
+            ctx.clone(),
         );
 
         let stderr = Self::spawn_thread_reader(
@@ -61,6 +64,7 @@ impl ChildApp {
                 .stderr
                 .take()
                 .ok_or(ExecutionError::NoStdoutOrStderr)?,
+            ctx,
         );
 
         if let Some(stdin) = stdin {
@@ -76,7 +80,7 @@ impl ChildApp {
             }
         }
 
-        Ok(ChildApp {
+        Ok(Self {
             child,
             stdout: Some(stdout),
             stderr: Some(stderr),
@@ -95,25 +99,30 @@ impl ChildApp {
     }
 
     pub fn kill(&mut self) {
-        let _ = self.child.kill();
+        drop(self.child.kill());
         self.stdout = None;
         self.stderr = None;
     }
 
-    fn spawn_thread_reader<R: Read + Send + Sync + 'static>(stdio: R) -> Receiver<Option<String>> {
+    fn spawn_thread_reader<R: Read + Send + Sync + 'static>(
+        stdio: R,
+        ctx: egui::Context,
+    ) -> Receiver<Option<String>> {
         let mut reader = BufReader::new(stdio);
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || loop {
             let mut output = String::new();
             if let Ok(0) = reader.read_line(&mut output) {
                 // End of output
-                let _ = tx.send(None);
+                drop(tx.send(None));
+                ctx.request_repaint();
                 break;
             }
             // Send returns error only if data will never be received
             if tx.send(Some(output)).is_err() {
                 break;
             }
+            ctx.request_repaint();
         });
         rx
     }

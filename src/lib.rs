@@ -25,26 +25,27 @@
 //! }
 //! ```
 
-mod app_state;
+pub mod app_state;
 mod arg_state;
 mod child_app;
 mod error;
 /// Additional options for output like progress bars.
 pub mod output;
-mod settings;
+pub mod settings;
 
 use app_state::AppState;
 use child_app::{ChildApp, StdinType};
 use clap::{ArgMatches, Command, FromArgMatches, IntoApp};
 use eframe::{
-    egui::{self, Button, Color32, CtxRef, FontData, FontDefinitions, Grid, Style, TextEdit, Ui},
-    epi,
+    egui::{self, Button, Color32, Context, FontData, FontDefinitions, Grid, Style, TextEdit, Ui},
+    CreationContext, Frame,
 };
 use error::ExecutionError;
-use native_dialog::FileDialog;
+#[cfg(not(target_arch = "wasm32"))]
+use rfd::FileDialog;
 
 use output::Output;
-pub use settings::{LocalizationSettings, Settings};
+pub use settings::{Localization, Settings};
 use std::{borrow::Cow, hash::Hash};
 
 const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
@@ -59,6 +60,7 @@ const CHILD_APP_ENV_VAR: &str = "KLASK_CHILD_APP";
 ///    println!("{}", matches.is_present("debug"))
 /// });
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMatches)) {
     if std::env::var(CHILD_APP_ENV_VAR).is_ok() {
         std::env::remove_var(CHILD_APP_ENV_VAR);
@@ -67,17 +69,18 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
             .try_get_matches()
             .expect("Internal error, arguments should've been verified by the GUI app");
 
-        f(&matches)
+        f(&matches);
     } else {
         // During validation we don't pass in a binary name
         let app = app.setting(clap::AppSettings::NoBinaryName);
+        let app_name = app.get_name().to_string();
 
         // eframe::run_native requires that Box::new(klask) has 'static
         // lifetime, so we must leak here. But it never returns (return value !)
         // so it should be ok.
         let localization = Box::leak(Box::new(settings.localization));
 
-        let klask = Klask {
+        let mut klask = Klask {
             state: AppState::new(&app, localization),
             tab: Tab::Arguments,
             env: settings.enable_env.map(|desc| (desc, vec![])),
@@ -94,7 +97,14 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
             style: settings.style,
         };
         let native_options = eframe::NativeOptions::default();
-        eframe::run_native(Box::new(klask), native_options);
+        eframe::run_native(
+            app_name.as_str(),
+            native_options,
+            Box::new(|cc| {
+                klask.setup(cc);
+                Box::new(klask)
+            }),
+        );
     }
 }
 
@@ -113,6 +123,7 @@ pub fn run_app(app: Command<'static>, settings: Settings, f: impl FnOnce(&ArgMat
 ///     println!("{}", example.debug);
 /// });
 /// ```
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run_derived<C, F>(settings: Settings, f: F)
 where
     C: IntoApp + FromArgMatches,
@@ -141,7 +152,7 @@ struct Klask<'s> {
     app: Command<'static>,
 
     custom_font: Option<Cow<'static, [u8]>>,
-    localization: &'s LocalizationSettings,
+    localization: &'s Localization,
     style: Style,
 }
 
@@ -152,18 +163,13 @@ enum Tab {
     Stdin,
 }
 
-impl epi::App for Klask<'_> {
-    fn name(&self) -> &str {
-        self.app.get_name()
-    }
-
-    fn update(&mut self, ctx: &CtxRef, _frame: &epi::Frame) {
+impl eframe::App for Klask<'_> {
+    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 // Tab selection
-                let tab_count = 1
-                    + if self.env.is_some() { 1 } else { 0 }
-                    + if self.stdin.is_some() { 1 } else { 0 };
+                let tab_count =
+                    1 + usize::from(self.env.is_some()) + usize::from(self.stdin.is_some());
 
                 if tab_count > 1 {
                     ui.columns(tab_count, |ui| {
@@ -210,9 +216,8 @@ impl epi::App for Klask<'_> {
                             let localization = self.localization;
                             ui.horizontal(|ui| {
                                 if ui.button(&localization.select_directory).clicked() {
-                                    if let Some(file) =
-                                        FileDialog::new().show_open_single_dir().ok().flatten()
-                                    {
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    if let Some(file) = FileDialog::new().pick_folder() {
                                         *path = file.to_string_lossy().into_owned();
                                     }
                                 }
@@ -237,7 +242,7 @@ impl epi::App for Klask<'_> {
                         )
                         .clicked()
                     {
-                        match self.try_start_execution() {
+                        match self.try_start_execution(ctx.clone()) {
                             Ok(child) => {
                                 // Reset
                                 self.state.update_validation_error("", "");
@@ -259,7 +264,7 @@ impl epi::App for Klask<'_> {
                     if self.is_child_running() {
                         let mut running_text = String::from(&self.localization.running);
                         for _ in 0..((2.0 * ui.input(|i| i.time)) as i32 % 4) {
-                            running_text.push('.')
+                            running_text.push('.');
                         }
                         ui.label(running_text);
                     }
@@ -269,9 +274,11 @@ impl epi::App for Klask<'_> {
             });
         });
     }
+}
 
-    fn setup(&mut self, ctx: &CtxRef, _: &epi::Frame, _: Option<&dyn epi::Storage>) {
-        ctx.set_style(self.style.clone());
+impl Klask<'_> {
+    fn setup(&mut self, cc: &CreationContext) {
+        cc.egui_ctx.set_style(self.style.clone());
 
         if let Some(custom_font) = self.custom_font.take() {
             let font_name = String::from("custom_font");
@@ -282,28 +289,27 @@ impl epi::App for Klask<'_> {
                 FontData {
                     font: custom_font,
                     index: 0,
+                    tweak: Default::default(),
                 },
             );
 
             fonts
-                .fonts_for_family
+                .families
                 .entry(egui::FontFamily::Proportional)
                 .or_default()
                 .insert(0, font_name.clone());
 
             fonts
-                .fonts_for_family
+                .families
                 .entry(egui::FontFamily::Monospace)
                 .or_default()
                 .push(font_name);
 
-            ctx.set_fonts(fonts);
+            cc.egui_ctx.set_fonts(fonts);
         }
     }
-}
 
-impl Klask<'_> {
-    fn try_start_execution(&mut self) -> Result<ChildApp, ExecutionError> {
+    fn try_start_execution(&mut self, ctx: egui::Context) -> Result<ChildApp, ExecutionError> {
         let args = self.state.get_cmd_args(vec![])?;
 
         // Check for validation errors
@@ -327,6 +333,7 @@ impl Klask<'_> {
             self.env.clone().map(|(_, env)| env),
             self.stdin.clone().map(|(_, stdin)| stdin),
             self.working_dir.clone().map(|(_, dir)| dir),
+            ctx,
         )
     }
 
@@ -428,8 +435,8 @@ impl Klask<'_> {
             StdinType::File(path) => {
                 ui.horizontal(|ui| {
                     if ui.button(&localization.select_file).clicked() {
-                        if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten()
-                        {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if let Some(file) = FileDialog::new().pick_file() {
                             *path = file.to_string_lossy().into_owned();
                         }
                     }

@@ -1,8 +1,9 @@
-use crate::{settings::LocalizationSettings, Klask};
+use crate::{settings::Localization, Klask};
 use clap::{Arg, ValueHint};
 use eframe::egui::{widgets::Widget, ComboBox, Response, TextEdit, Ui};
 use inflector::Inflector;
-use native_dialog::FileDialog;
+#[cfg(not(target_arch = "wasm32"))]
+use rfd::FileDialog;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -15,7 +16,7 @@ pub struct ArgState<'s> {
     pub forbid_empty: bool,
     pub kind: ArgKind,
     pub validation_error: Option<String>,
-    pub localization: &'s LocalizationSettings,
+    pub localization: &'s Localization,
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +42,7 @@ pub enum ArgKind {
 }
 
 impl<'s> ArgState<'s> {
-    pub fn new(arg: &Arg, localization: &'s LocalizationSettings) -> Self {
+    pub fn new(arg: &Arg, localization: &'s Localization) -> Self {
         let kind = if arg.is_takes_value_set() {
             let mut default = arg
                 .get_default_values()
@@ -72,7 +73,7 @@ impl<'s> ArgState<'s> {
                 }
             } else {
                 ArgKind::String {
-                    value: ("".to_string(), Uuid::new_v4()),
+                    value: (String::new(), Uuid::new_v4()),
                     default: default.next(),
                     possible,
                     value_hint: arg.get_value_hint(),
@@ -116,7 +117,7 @@ impl<'s> ArgState<'s> {
         value_hint: ValueHint,
         optional: bool,
         validation_error: bool,
-        localization: &'s LocalizationSettings,
+        localization: &'s Localization,
     ) -> Response {
         let is_error = (!optional && value.is_empty()) || validation_error;
         if is_error {
@@ -130,7 +131,8 @@ impl<'s> ArgState<'s> {
                     ValueHint::AnyPath | ValueHint::FilePath | ValueHint::ExecutablePath
                 ) && ui.button(&localization.select_file).clicked()
                 {
-                    if let Some(file) = FileDialog::new().show_open_single_file().ok().flatten() {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some(file) = FileDialog::new().pick_file() {
                         *value = file.to_string_lossy().into_owned();
                     }
                 }
@@ -138,7 +140,8 @@ impl<'s> ArgState<'s> {
                 if matches!(value_hint, ValueHint::AnyPath | ValueHint::DirPath)
                     && ui.button(&localization.select_directory).clicked()
                 {
-                    if let Some(file) = FileDialog::new().show_open_single_dir().ok().flatten() {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let Some(file) = FileDialog::new().pick_folder() {
                         *value = file.to_string_lossy().into_owned();
                     }
                 }
@@ -229,7 +232,7 @@ impl<'s> ArgState<'s> {
 
                                 if *req_delimiter {
                                     args.push(
-                                        (&values
+                                        (values
                                             .iter()
                                             .map(|(s, _)| format!(",{}", s))
                                             .collect::<String>()[1..])
@@ -353,7 +356,7 @@ impl Widget for &mut ArgState<'_> {
 
                         ui.horizontal(|ui| {
                             if ui.button(&localization.new_value).clicked() {
-                                values.push(("".into(), Uuid::new_v4()));
+                                values.push((String::new(), Uuid::new_v4()));
                             }
 
                             let text = if default.is_empty() {

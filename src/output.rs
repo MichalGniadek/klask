@@ -1,3 +1,8 @@
+use crate::child_app::ChildApp;
+use crate::error::ExecutionError;
+use cansi::{v3::CategorisedSlice, Color, Intensity};
+use eframe::egui::{vec2, Color32, Label, ProgressBar, RichText, Ui, Widget};
+use linkify::{LinkFinder, LinkKind};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
@@ -28,7 +33,7 @@ use crate::error::ExecutionError;
 /// }
 /// ```
 pub fn progress_bar(description: &str, value: f32) {
-    progress_bar_with_id(description, description, value)
+    progress_bar_with_id(description, description, value);
 }
 
 /// Displays a progress bar in the output. First call creates
@@ -82,7 +87,7 @@ impl Widget for &mut Output {
 
                 if let Some(text) = iter.next() {
                     if !text.is_empty() {
-                        output.push((0, OutputType::Text(text.to_string())))
+                        output.push((0, OutputType::Text(text.to_string())));
                     }
                 }
 
@@ -101,7 +106,7 @@ impl Widget for &mut Output {
                         // Get rid of the newline
                         let text = &text[1..];
                         if !text.is_empty() {
-                            output.push((0, OutputType::Text(text.to_string())))
+                            output.push((0, OutputType::Text(text.to_string())));
                         }
                     }
                 }
@@ -116,7 +121,7 @@ impl Widget for &mut Output {
                                     OutputType::Text(text) => text,
                                     OutputType::ProgressBar(text, _) => text,
                                 })
-                                .flat_map(|text| cansi::categorise_text(text))
+                                .flat_map(|text| cansi::v3::categorise_text(text))
                                 .map(|slice| slice.text)
                                 .collect::<String>());
                     }
@@ -165,8 +170,8 @@ impl OutputType {
     pub fn send(self, id: u64) {
         // Make sure to get rid of any newlines
         match self {
-            OutputType::Text(s) => print!("{}", s),
-            OutputType::ProgressBar(desc, value) => send_message(&[
+            Self::Text(s) => print!("{}", s),
+            Self::ProgressBar(desc, value) => send_message(&[
                 &id.to_string(),
                 Self::PROGRESS_BAR_STR,
                 &desc.replace('\n', " "),
@@ -182,14 +187,13 @@ impl OutputType {
                 format!("{}\n", iter.next().unwrap_or_default()),
                 iter.next().and_then(|s| s.parse().ok()).unwrap_or_default(),
             )),
-            None => None,
-            _ => panic!(),
+            _ => None,
         }
     }
 }
 
 fn format_output(ui: &mut Ui, text: &str) {
-    let output = cansi::categorise_text(text);
+    let output = cansi::v3::categorise_text(text);
 
     let previous = ui.style().spacing.item_spacing;
     ui.style_mut().spacing.item_spacing = vec2(0.0, 0.0);
@@ -197,8 +201,8 @@ fn format_output(ui: &mut Ui, text: &str) {
     ui.horizontal_wrapped(|ui| {
         for CategorisedSlice {
             text,
-            fg_colour,
-            bg_colour,
+            fg,
+            bg,
             intensity,
             italic,
             underline,
@@ -215,28 +219,32 @@ fn format_output(ui: &mut Ui, text: &str) {
                     Some(_) | None => {
                         let mut text = RichText::new(span.as_str());
 
-                        text = text.color(ansi_color_to_egui(fg_colour));
-
-                        if bg_colour != Color::Black {
-                            text = text.background_color(ansi_color_to_egui(bg_colour));
+                        if let Some(fg) = fg {
+                            text = text.color(ansi_color_to_egui(fg));
                         }
 
-                        if italic {
+                        if let Some(bg) = bg {
+                            if bg != Color::Black {
+                                text = text.background_color(ansi_color_to_egui(bg));
+                            }
+                        }
+
+                        if italic == Some(true) {
                             text = text.italics();
                         }
 
-                        if underline {
+                        if underline == Some(true) {
                             text = text.underline();
                         }
 
-                        if strikethrough {
+                        if strikethrough == Some(true) {
                             text = text.strikethrough();
                         }
 
                         text = match intensity {
-                            cansi::Intensity::Normal => text,
-                            cansi::Intensity::Bold => text.strong(),
-                            cansi::Intensity::Faint => text.weak(),
+                            Some(Intensity::Bold) => text.strong(),
+                            Some(Intensity::Faint) => text.weak(),
+                            Some(Intensity::Normal) | None => text,
                         };
 
                         ui.add(Label::new(text))
